@@ -17,6 +17,8 @@
 
 package net.data.technology.jraft;
 
+import com.google.common.net.HostAndPort;
+
 public class RaftConsensus {
 
     public static RaftMessageSender run(RaftContext context){
@@ -28,6 +30,21 @@ public class RaftConsensus {
         RaftMessageSender messageSender = server.createMessageSender();
         context.getStateMachine().start(messageSender);
         context.getRpcListener().startListening(server);
+
+
+
+        // rapid test
+        try {
+            final HostAndPort listenAddress = HostAndPort.fromString(String.format("127.0.0.1:85%02d", context.getServerStateManager().getServerId()));
+            final HostAndPort seedAddress = HostAndPort.fromString("127.0.0.1:8501");
+            StandaloneAgent standaloneAgent = new StandaloneAgent(listenAddress, seedAddress, context.getLoggerFactory());
+
+            standaloneAgent.startCluster();
+        } catch (Exception e) {
+            context.getLoggerFactory().getLogger(RaftConsensus.class).error("Failed to start rapid stand alone agent with exception {}", e);
+            System.out.println("Failed to start rapid stand alone agent with exception " + e);
+        }
+
         return messageSender;
     }
 }
