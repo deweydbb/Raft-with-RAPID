@@ -13,7 +13,7 @@ if exist "%curdir%\server%1" (
 mkdir "%curdir%\server%1"
 echo server.id=%1 > "%curdir%\server%1\config.properties"
 echo {"logIndex":0,"lastLogIndex":0,"servers":[{"id": %1,"endpoint": "tcp://localhost:900%1"}]}> "%curdir%\server%1\cluster.json"
-start "server%1" /D "%curdir%\server%1" java -jar %curdir%\kvstore.jar server "%curdir%\server%1" 800%1
+start "server%1" /D "%curdir%\server%1" java "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar %curdir%\kvstore.jar server "%curdir%\server%1" 800%1
 @echo on
 
 :exit
