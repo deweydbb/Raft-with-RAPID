@@ -28,7 +28,6 @@ import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,22 +37,18 @@ import java.util.function.BiConsumer;
 
 public class KVStore implements StateMachine {
 
-    private long commitIndex;
     private final Map<String, String> map = new ConcurrentHashMap<>();
     private final int port;
     private final org.apache.log4j.Logger logger;
     private AsynchronousServerSocketChannel listener;
     private ExecutorService executorService;
-    private RaftMessageSender messageSender;
 
-    public KVStore(Path baseDir, int listeningPort) {
+    public KVStore(int listeningPort) {
         this.port = listeningPort;
         this.logger = LogManager.getLogger(getClass());
-        this.commitIndex = 0;
     }
 
     public void start(RaftMessageSender messageSender) {
-        this.messageSender = messageSender;
         int processors = Runtime.getRuntime().availableProcessors();
         executorService = Executors.newFixedThreadPool(processors);
         try {
@@ -88,7 +83,6 @@ public class KVStore implements StateMachine {
     public void commit(long logIndex, byte[] data) {
         String message = new String(data, StandardCharsets.UTF_8);
         System.out.printf("commit: %d\t%s\n", logIndex, message);
-        this.commitIndex = logIndex;
         String[] split = message.split(":");
         if (split.length == 2) {
             map.put(split[0], split[1]);
@@ -128,25 +122,20 @@ public class KVStore implements StateMachine {
     }
 
     private void readRequest(AsynchronousSocketChannel connection) {
-        System.out.println("Running read request");
         ByteBuffer buffer = ByteBuffer.allocate(4);
         try {
             AsyncUtility.readFromChannel(connection, buffer, null, handlerFrom((Integer bytesRead, Object ctx) -> {
                 if (bytesRead < 4) {
                     logger.info("failed to read the request header from client socket");
-                    System.out.println("failed to read the request header from client socket");
                     closeSocket(connection);
                 } else {
                     try {
                         logger.debug("request header read, try to read the message");
-                        System.out.println("request header read, try to read the message");
                         int bodySize = 0;
                         for (int i = 0; i < 4; ++i) {
                             int value = buffer.get(i);
                             bodySize = bodySize | (value << (i * 8));
                         }
-
-                        System.out.println("bodySize: " + bodySize);
 
                         if (bodySize > 1024) {
                             sendResponse(connection, "Bad Request");
@@ -197,11 +186,12 @@ public class KVStore implements StateMachine {
 
     private void processMessage(String message, CompletableFuture<String> future) {
         if ("status".equalsIgnoreCase(message)) {
-            System.out.println("Committed Messages: " + map);
-            future.complete("Done\n");
+            future.complete("Committed Messages:" + map + "\n");
         } else {
+            String res = map.getOrDefault(message, "KeyNotFound") + "\n";
+            System.out.print("Value: " + res);
             // key is the message
-            future.complete(map.getOrDefault(message, "KeyNotFound") + "\n");
+            future.complete(res);
         }
     }
 

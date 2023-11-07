@@ -21,9 +21,7 @@ import net.data.technology.jraft.extensions.Log4jLoggerFactory;
 import net.data.technology.jraft.extensions.RpcTcpClientFactory;
 import net.data.technology.jraft.extensions.RpcTcpListener;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -31,6 +29,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.StringTokenizer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -77,7 +77,7 @@ public class App {
                 .withMaximumAppendingSize(200)
                 .withLogSyncBatchSize(5)
                 .withLogSyncStoppingGap(5);
-        KVStore mp = new KVStore(baseDir, port);
+        KVStore mp = new KVStore(port);
         RaftContext context = new RaftContext(
                 stateManager,
                 mp,
@@ -132,24 +132,59 @@ public class App {
 
             if (message.startsWith("get")) {
                 message = message.substring(message.indexOf(':') + 1);
-                // send to state machine
-                Socket socket = new Socket("127.0.0.1", 8001);
-                OutputStream socketOutputStream = socket.getOutputStream();
-
-                int msgLen = message.getBytes(StandardCharsets.UTF_8).length;
-                byte[] bytes = new byte[msgLen + 4];
-                for (int i = 0; i < 4; ++i) {
-                    int value = (msgLen >> (i * 8));
-                    bytes[i] = (byte) (value & 0xFF);
+                String[] split = message.split(":");
+                String key = split[0];
+                ClusterServer server;
+                if (split.length > 1) {
+                    server = configuration.getServer(Integer.parseInt(split[1]));
+                } else {
+                    // get random server
+                    List<ClusterServer> servers = configuration.getServers();
+                    server = servers.get(new Random().nextInt(servers.size()));
                 }
 
-                System.arraycopy(message.getBytes(StandardCharsets.UTF_8), 0, bytes, 4, msgLen);
-
-                socketOutputStream.write(bytes);
-
-                System.out.println(new BufferedReader(new InputStreamReader(socket.getInputStream())).readLine());
-                socket.close();
+                String result = get(server, key);
+                System.out.println(result);
             }
         }
+    }
+
+    private static String get(ClusterServer server, String key) throws Exception {
+        String endpoint = server.getEndpoint();
+        endpoint = endpoint.substring(endpoint.lastIndexOf('/') + 1);
+
+        String host = endpoint.split(":")[0];
+        if ("localhost".equals(host)) {
+            host = "127.0.0.1";
+        }
+        int port = Integer.parseInt(endpoint.split(":")[1]) - 1000;
+
+        Socket socket = new Socket(host, port);
+        OutputStream socketOutputStream = socket.getOutputStream();
+
+        int msgLen = key.getBytes(StandardCharsets.UTF_8).length;
+        byte[] bytes = new byte[msgLen + 4];
+        for (int i = 0; i < 4; ++i) {
+            int value = (msgLen >> (i * 8));
+            bytes[i] = (byte) (value & 0xFF);
+        }
+
+        System.arraycopy(key.getBytes(StandardCharsets.UTF_8), 0, bytes, 4, msgLen);
+        socketOutputStream.write(bytes);
+
+        DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+        byte[] msgSize = new byte[4];
+        in.read(msgSize);
+
+        byte[] msg = new byte[little2big(msgSize) - 1];
+        in.read(msg);
+        in.close();
+        socket.close();
+
+        return new String(msg);
+    }
+
+    private static int little2big(byte[ ] b) {
+        return ((b[3]&0xff)<<24)+((b[2]&0xff)<<16)+((b[1]&0xff)<<8)+(b[0]&0xff);
     }
 }
