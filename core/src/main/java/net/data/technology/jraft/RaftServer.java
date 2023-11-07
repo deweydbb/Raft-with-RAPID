@@ -17,23 +17,8 @@
 package net.data.technology.jraft;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class RaftServer implements RaftMessageHandler {
 
@@ -1151,11 +1136,6 @@ public class RaftServer implements RaftMessageHandler {
         this.configChanging = true;
         this.logStore.append(new LogEntry(this.state.getTerm(), newConfig.toBytes(), LogValueType.Configuration));
         this.requestAppendEntries();
-    }
-
-    private int getSnapshotSyncBlockSize() {
-        int blockSize = this.context.getRaftParameters().getSnapshotBlockSize();
-        return blockSize == 0 ? DEFAULT_SNAPSHOT_SYNC_BLOCK_SIZE : blockSize;
     }
 
     private long termForLastLog(long logIndex) {

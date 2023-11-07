@@ -17,6 +17,13 @@
 
 package net.data.technology.jraft.extensions;
 
+import net.data.technology.jraft.RaftMessageHandler;
+import net.data.technology.jraft.RaftRequestMessage;
+import net.data.technology.jraft.RaftResponseMessage;
+import net.data.technology.jraft.RpcListener;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
@@ -30,14 +37,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
-
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
-
-import net.data.technology.jraft.RaftMessageHandler;
-import net.data.technology.jraft.RaftRequestMessage;
-import net.data.technology.jraft.RaftResponseMessage;
-import net.data.technology.jraft.RpcListener;
 
 public class RpcTcpListener implements RpcListener {
     private int port;

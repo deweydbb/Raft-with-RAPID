@@ -1,13 +1,12 @@
 /**
- *
  * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  The ASF licenses 
+ * or more contributor license agreements.  The ASF licenses
  * this file to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,19 +20,19 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 public class RaftContext {
 
-    private ServerStateManager serverStateManager;
-    private RpcListener rpcListener;
-    private LoggerFactory loggerFactory;
-    private RpcClientFactory rpcClientFactory;
-    private StateMachine stateMachine;
+    private final ServerStateManager serverStateManager;
+    private final RpcListener rpcListener;
+    private final LoggerFactory loggerFactory;
+    private final RpcClientFactory rpcClientFactory;
+    private final StateMachine stateMachine;
     private RaftParameters raftParameters;
     private ScheduledThreadPoolExecutor scheduledExecutor;
 
-    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory){
+    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory) {
         this(stateManager, stateMachine, raftParameters, rpcListener, logFactory, rpcClientFactory, null);
     }
 
-    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, ScheduledThreadPoolExecutor scheduledExecutor){
+    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, ScheduledThreadPoolExecutor scheduledExecutor) {
         this.serverStateManager = stateManager;
         this.stateMachine = stateMachine;
         this.raftParameters = raftParameters;
@@ -41,11 +40,11 @@ public class RaftContext {
         this.rpcListener = rpcListener;
         this.loggerFactory = logFactory;
         this.scheduledExecutor = scheduledExecutor;
-        if(this.scheduledExecutor == null){
+        if (this.scheduledExecutor == null) {
             this.scheduledExecutor = new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
         }
 
-        if(this.raftParameters == null){
+        if (this.raftParameters == null) {
             this.raftParameters = new RaftParameters()
                     .withElectionTimeoutUpper(300)
                     .withElectionTimeoutLower(150)
@@ -53,9 +52,7 @@ public class RaftContext {
                     .withRpcFailureBackoff(25)
                     .withMaximumAppendingSize(100)
                     .withLogSyncBatchSize(1000)
-                    .withLogSyncStoppingGap(100)
-                    .withSnapshotEnabled(0)
-                    .withSyncSnapshotBlockSize(0);
+                    .withLogSyncStoppingGap(100);
         }
     }
 
@@ -83,7 +80,7 @@ public class RaftContext {
         return raftParameters;
     }
 
-    public ScheduledThreadPoolExecutor getScheduledExecutor(){
+    public ScheduledThreadPoolExecutor getScheduledExecutor() {
         return this.scheduledExecutor;
     }
 }

@@ -17,28 +17,22 @@
 
 package net.data.technology.jraft.extensions;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.RandomAccessFile;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.data.technology.jraft.ClusterConfiguration;
+import net.data.technology.jraft.SequentialLogStore;
+import net.data.technology.jraft.ServerState;
+import net.data.technology.jraft.ServerStateManager;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
+
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
-
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
-
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
-import net.data.technology.jraft.ClusterConfiguration;
-import net.data.technology.jraft.SequentialLogStore;
-import net.data.technology.jraft.ServerState;
-import net.data.technology.jraft.ServerStateManager;
 
 public class FileBasedServerStateManager implements ServerStateManager {
 
