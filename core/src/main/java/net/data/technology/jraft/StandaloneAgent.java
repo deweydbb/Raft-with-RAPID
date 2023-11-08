@@ -29,6 +29,7 @@ public class StandaloneAgent {
                     .start();
 
         } else {
+            // doesnt return until been accepted into cluster
             cluster = new Cluster.Builder(listenAddress)
                     .join(seedAddress);
         }
@@ -38,6 +39,10 @@ public class StandaloneAgent {
                 this::onViewChange);
         cluster.registerSubscription(com.vrg.rapid.ClusterEvents.KICKED,
                 this::onKicked);
+
+        System.out.println(cluster.getMemberlist());
+        System.out.println(cluster.getClusterMetadata());
+        System.out.println("cluster: " + cluster.getConfigurationId());
     }
 
     /**
@@ -46,6 +51,7 @@ public class StandaloneAgent {
     void onViewChangeProposal(final ClusterStatusChange viewChange) {
         LOG.info("The condition detector has outputted a proposal: {}", viewChange);
         System.out.println("The condition detector has outputted a proposal: " + viewChange);
+        // Idea is to parse/extract information of removed/added servers, and then update the cluster config - maybe change linkedList this.servers
     }
 
     /**
@@ -62,6 +68,7 @@ public class StandaloneAgent {
     void onViewChange(final ClusterStatusChange viewChange) {
         LOG.info("View change detected: {}", viewChange);
         System.out.println("View change detected: " + viewChange);
+        System.out.println("view change id " + viewChange.getConfigurationId());
     }
 
     /**

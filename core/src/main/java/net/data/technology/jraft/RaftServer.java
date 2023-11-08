@@ -56,7 +56,11 @@ public class RaftServer implements RaftMessageHandler {
     private int steppingDown = 0;
     // end fields for extended messages
 
+    // rapid variables
+    private long configNum;
+
     public RaftServer(RaftContext context) {
+        this.configNum = 0; // TODO add config num variable
         this.id = context.getServerStateManager().getServerId();
         this.state = context.getServerStateManager().readState();
         this.logStore = context.getServerStateManager().loadLogStore();
@@ -526,6 +530,7 @@ public class RaftServer implements RaftMessageHandler {
         }
     }
 
+    // TODO: leader does not need to send heartbeats, so this function should never be called
     private synchronized void handleHeartbeatTimeout(PeerServer peer) {
         this.logger.debug("Heartbeat timeout for %d", peer.getId());
         if (this.role == ServerRole.Leader) {
@@ -556,6 +561,7 @@ public class RaftServer implements RaftMessageHandler {
 
         RaftParameters parameters = this.context.getRaftParameters();
         int electionTimeout = parameters.getElectionTimeoutLowerBound() + this.random.nextInt(parameters.getElectionTimeoutUpperBound() - parameters.getElectionTimeoutLowerBound() + 1);
+        // Schedule when election happens based off randomized timeout
         this.scheduledElection = this.context.getScheduledExecutor().schedule(this.electionTimeoutTask, electionTimeout, TimeUnit.MILLISECONDS);
     }
 
@@ -583,14 +589,16 @@ public class RaftServer implements RaftMessageHandler {
         // if current config is not committed, try to commit it
         if (this.config.getLogIndex() == 0) {
             this.config.setLogIndex(this.logStore.getFirstAvailableIndex());
+            // TODO we probably no longer need this because Raft delegates configuration to from logstore RAPID
             this.logStore.append(new LogEntry(this.state.getTerm(), this.config.toBytes(), LogValueType.Configuration));
             this.logger.info("add initial configuration to log store");
             this.configChanging = true;
         }
-
+        // hey I've become leader
         this.requestAppendEntries();
     }
 
+    // TODO: we can probably delete because don't need to call
     private void enableHeartbeatForPeer(PeerServer peer) {
         peer.enableHeartbeat(true);
         peer.resumeHeartbeatingSpeed();
@@ -706,11 +714,13 @@ public class RaftServer implements RaftMessageHandler {
         List<Integer> serversRemoved = new LinkedList<Integer>();
         List<ClusterServer> serversAdded = new LinkedList<ClusterServer>();
         for (ClusterServer s : newConfig.getServers()) {
+            // loop through new servers and if peers list does not contain server id and ..(not itself). then add new server
             if (!this.peers.containsKey(s.getId()) && s.getId() != this.id) {
                 serversAdded.add(s);
             }
         }
 
+        // checks that peer is in new config and if not add to serversRemoved
         for (Integer id : this.peers.keySet()) {
             if (newConfig.getServer(id.intValue()) == null) {
                 serversRemoved.add(id);
@@ -727,6 +737,7 @@ public class RaftServer implements RaftMessageHandler {
                 peer.setNextLogIndex(this.logStore.getFirstAvailableIndex());
                 this.peers.put(server.getId(), peer);
                 this.logger.info("server %d is added to cluster", peer.getId());
+                // TODO: Will probaly no longer need so delete
                 if (this.role == ServerRole.Leader) {
                     this.logger.info("enable heartbeating for server %d", peer.getId());
                     this.enableHeartbeatForPeer(peer);
@@ -767,7 +778,8 @@ public class RaftServer implements RaftMessageHandler {
     private synchronized RaftResponseMessage handleExtendedMessages(RaftRequestMessage request) {
         if (request.getMessageType() == RaftMessageType.AddServerRequest) {
             return this.handleAddServerRequest(request);
-        } else if (request.getMessageType() == RaftMessageType.RemoveServerRequest) {
+        } // TODO: we will be removing aeverything except synclogrequest because instead have server communicate to RAPID
+        else if (request.getMessageType() == RaftMessageType.RemoveServerRequest) {
             return this.handleRemoveServerRequest(request);
         } else if (request.getMessageType() == RaftMessageType.SyncLogRequest) {
             return this.handleLogSyncRequest(request);
@@ -990,7 +1002,7 @@ public class RaftServer implements RaftMessageHandler {
         response.setAccepted(true);
         return response;
     }
-
+    // idea is get logEntries and apply to their log
     private RaftResponseMessage handleLogSyncRequest(RaftRequestMessage request) {
         LogEntry[] logEntries = request.getLogEntries();
         RaftResponseMessage response = new RaftResponseMessage();
@@ -1053,7 +1065,7 @@ public class RaftServer implements RaftMessageHandler {
 
         this.serverToJoin.SendRequest(request).whenCompleteAsync(this::handleExtendedResponse, this.context.getScheduledExecutor());
     }
-
+    // TODO: We won't have this method
     private void inviteServerToJoinCluster() {
         RaftRequestMessage request = new RaftRequestMessage();
         request.setCommitIndex(this.quickCommitIndex);
@@ -1066,6 +1078,7 @@ public class RaftServer implements RaftMessageHandler {
         this.serverToJoin.SendRequest(request).whenCompleteAsync(this::handleExtendedResponse, this.context.getScheduledExecutor());
     }
 
+    // tODO: Change this to be more for our rapid invariant
     private RaftResponseMessage handleJoinClusterRequest(RaftRequestMessage request) {
         LogEntry[] logEntries = request.getLogEntries();
         RaftResponseMessage response = new RaftResponseMessage();
@@ -1105,6 +1118,7 @@ public class RaftServer implements RaftMessageHandler {
         return response;
     }
 
+    // TODO: since we will not differentiate between killing server and crashing server, our server admin can delete server instead
     private RaftResponseMessage handleLeaveClusterRequest(RaftRequestMessage request) {
         RaftResponseMessage response = new RaftResponseMessage();
         response.setSource(this.id);
@@ -1123,6 +1137,7 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private void removeServerFromCluster(int serverId) {
+        // they create new cluster config and add servers to config if not the one they want to remove
         ClusterConfiguration newConfig = new ClusterConfiguration();
         newConfig.setLastLogIndex(this.config.getLogIndex());
         newConfig.setLogIndex(this.logStore.getFirstAvailableIndex());
@@ -1146,8 +1161,10 @@ public class RaftServer implements RaftMessageHandler {
         return this.logStore.getLogEntryAt(logIndex).getTerm();
     }
 
+    // implements addserver removeserver and entries
     static class RaftMessageSenderImpl implements RaftMessageSender {
-
+        // lower level, as take info and convert it to bytes etc...
+        // method later tries to send to current leader
         private RaftServer server;
         private Map<Integer, RpcClient> rpcClients;
 
@@ -1155,7 +1172,7 @@ public class RaftServer implements RaftMessageHandler {
             this.server = server;
             this.rpcClients = new ConcurrentHashMap<Integer, RpcClient>();
         }
-
+        // probably won't need this
         @Override
         public CompletableFuture<Boolean> addServer(ClusterServer server) {
             LogEntry[] logEntries = new LogEntry[1];
@@ -1165,7 +1182,7 @@ public class RaftServer implements RaftMessageHandler {
             request.setLogEntries(logEntries);
             return this.sendMessageToLeader(request);
         }
-
+        // probably won't need this
         @Override
         public CompletableFuture<Boolean> removeServer(int serverId) {
             if (serverId < 0) {
@@ -1245,7 +1262,7 @@ public class RaftServer implements RaftMessageHandler {
             this.server = server;
             this.conditionalLock = new Object();
         }
-
+        // external function that notifies via thread when more to commit
         void moreToCommit() {
             synchronized (this.conditionalLock) {
                 this.conditionalLock.notify();
@@ -1257,6 +1274,7 @@ public class RaftServer implements RaftMessageHandler {
             while (true) {
                 try {
                     long currentCommitIndex = server.state.getCommitIndex();
+                    // quick commit index stored in server state as parameter
                     while (server.quickCommitIndex <= currentCommitIndex
                             || currentCommitIndex >= server.logStore.getFirstAvailableIndex() - 1) {
                         synchronized (this.conditionalLock) {
@@ -1265,13 +1283,14 @@ public class RaftServer implements RaftMessageHandler {
 
                         currentCommitIndex = server.state.getCommitIndex();
                     }
-
+                    // if server thinks it has commited more things and there are more log entries than the current commit index ,
                     while (currentCommitIndex < server.quickCommitIndex && currentCommitIndex < server.logStore.getFirstAvailableIndex() - 1) {
                         currentCommitIndex += 1;
                         LogEntry logEntry = server.logStore.getLogEntryAt(currentCommitIndex);
                         if (logEntry.getValueType() == LogValueType.Application) {
                             server.stateMachine.commit(currentCommitIndex, logEntry.getValue());
-                        } else if (logEntry.getValueType() == LogValueType.Configuration) {
+                        } // Won't have to worry about this because we won't have these log types
+                        else if (logEntry.getValueType() == LogValueType.Configuration) {
                             synchronized (server) {
                                 ClusterConfiguration newConfig = ClusterConfiguration.fromBytes(logEntry.getValue());
                                 server.logger.info("configuration at index %d is committed", newConfig.getLogIndex());
