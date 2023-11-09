@@ -16,6 +16,11 @@
 
 package net.data.technology.jraft;
 
+import com.google.common.net.HostAndPort;
+import com.vrg.rapid.Cluster;
+import com.vrg.rapid.ClusterStatusChange;
+
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
@@ -57,10 +62,10 @@ public class RaftServer implements RaftMessageHandler {
     // end fields for extended messages
 
     // rapid variables
-    private long configNum;
+    Cluster cluster;
+    private long configId;
 
     public RaftServer(RaftContext context) {
-        this.configNum = 0; // TODO add config num variable
         this.id = context.getServerStateManager().getServerId();
         this.state = context.getServerStateManager().readState();
         this.logStore = context.getServerStateManager().loadLogStore();
@@ -118,12 +123,74 @@ public class RaftServer implements RaftMessageHandler {
             }
         }
 
+        joinCluster(5);
+
         this.quickCommitIndex = this.state.getCommitIndex();
         this.commitingThread = new CommittingThread(this);
         this.role = ServerRole.Follower;
         new Thread(this.commitingThread).start();
         this.restartElectionTimer();
         this.logger.info("Server %d started", this.id);
+    }
+
+    private void joinCluster(int numRetries) {
+        try {
+            final HostAndPort listenAddress = HostAndPort.fromString(String.format("127.0.0.1:85%02d", id));
+            final HostAndPort seedAddress = HostAndPort.fromString("127.0.0.1:8501");
+
+            if (listenAddress.equals(seedAddress)) {
+                cluster = new Cluster.Builder(listenAddress)
+                        .start();
+
+            } else {
+                // doesn't return until been accepted into cluster
+                cluster = new Cluster.Builder(listenAddress)
+                        .join(seedAddress);
+            }
+            cluster.registerSubscription(com.vrg.rapid.ClusterEvents.VIEW_CHANGE_PROPOSAL,
+                    this::onViewChangeProposal);
+            cluster.registerSubscription(com.vrg.rapid.ClusterEvents.VIEW_CHANGE,
+                    this::onViewChange);
+            cluster.registerSubscription(com.vrg.rapid.ClusterEvents.KICKED,
+                    this::onKicked);
+
+            configId = cluster.getConfigurationId();
+        } catch (IOException | InterruptedException e) {
+            logger.warning("Failed to join cluster with exception {}", e);
+            if (numRetries == 0) {
+                throw new RuntimeException("Failed to join cluster with exception " + e);
+            }
+            joinCluster(numRetries - 1);
+        }
+    }
+
+    /**
+     * Executed whenever a Cluster VIEW_CHANGE_PROPOSAL event occurs.
+     */
+    public void onViewChangeProposal(final ClusterStatusChange viewChange) {
+        logger.info("The condition detector has outputted a proposal: {}", viewChange);
+        //System.out.println("The condition detector has outputted a proposal: " + viewChange);
+        // Idea is to parse/extract information of removed/added servers, and then update the cluster config - maybe change linkedList this.servers
+    }
+
+    /**
+     * Executed whenever a Cluster KICKED event occurs.
+     */
+    public void onKicked(final ClusterStatusChange viewChange) {
+        logger.info("We got kicked from the network: {}", viewChange);
+        System.out.println("We got kicked from the network: " + viewChange);
+        // TODO: implement later
+    }
+
+    /**
+     * Executed whenever a Cluster VIEW_CHANGE event occurs.
+     */
+    public synchronized void onViewChange(final ClusterStatusChange viewChange) {
+        logger.info("View change detected: {}", viewChange);
+        System.out.println("View change detected: " + viewChange);
+        System.out.println("view change id " + viewChange.getConfigurationId());
+
+        this.configId = viewChange.getConfigurationId();
     }
 
     public RaftMessageSender createMessageSender() {
@@ -189,16 +256,18 @@ public class RaftServer implements RaftMessageHandler {
 
         RaftResponseMessage response = new RaftResponseMessage();
         response.setMessageType(RaftMessageType.AppendEntriesResponse);
-        response.setTerm(this.state.getTerm());
+        response.setTerm(this.state.getTerm());        response.setConfigId(this.configId);
         response.setSource(this.id);
         response.setDestination(request.getSource());
+        response.setConfigId(this.configId);
 
         // After a snapshot the request.getLastLogIndex() may less than logStore.getStartingIndex() but equals to logStore.getStartingIndex() -1
         // In this case, log is Okay if request.getLastLogIndex() == lastSnapshot.getLastLogIndex() && request.getLastLogTerm() == lastSnapshot.getLastTerm()
+        boolean configOkay = this.configId == request.getConfigId();
         boolean logOkay = request.getLastLogIndex() == 0 ||
                 (request.getLastLogIndex() < this.logStore.getFirstAvailableIndex() &&
                         request.getLastLogTerm() == this.termForLastLog(request.getLastLogIndex()));
-        if (request.getTerm() < this.state.getTerm() || !logOkay) {
+        if (request.getTerm() < this.state.getTerm() || !configOkay || !logOkay) {
             response.setAccepted(false);
             response.setNextIndex(this.logStore.getFirstAvailableIndex());
             return response;
@@ -274,11 +343,13 @@ public class RaftServer implements RaftMessageHandler {
         response.setSource(this.id);
         response.setDestination(request.getSource());
         response.setTerm(this.state.getTerm());
+        response.setConfigId(this.configId);
 
+        boolean sameConfigId = this.configId == request.getConfigId();
         boolean logOkay = request.getLastLogTerm() > this.logStore.getLastLogEntry().getTerm() ||
                 (request.getLastLogTerm() == this.logStore.getLastLogEntry().getTerm() &&
                         this.logStore.getFirstAvailableIndex() - 1 <= request.getLastLogIndex());
-        boolean grant = request.getTerm() == this.state.getTerm() && logOkay && (this.state.getVotedFor() == request.getSource() || this.state.getVotedFor() == -1);
+        boolean grant = sameConfigId && request.getTerm() == this.state.getTerm() && logOkay && (this.state.getVotedFor() == request.getSource() || this.state.getVotedFor() == -1);
         response.setAccepted(grant);
         if (grant) {
             this.state.setVotedFor(request.getSource());
@@ -391,6 +462,7 @@ public class RaftServer implements RaftMessageHandler {
             request.setLastLogIndex(this.logStore.getFirstAvailableIndex() - 1);
             request.setLastLogTerm(this.termForLastLog(this.logStore.getFirstAvailableIndex() - 1));
             request.setTerm(this.state.getTerm());
+            request.setConfigId(this.configId);
             this.logger.debug("send %s to server %d with term %d", RaftMessageType.RequestVoteRequest.toString(), peer.getId(), this.state.getTerm());
             peer.SendRequest(request).whenCompleteAsync(this::handlePeerResponse, this.context.getScheduledExecutor());
         }

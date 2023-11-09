@@ -23,6 +23,16 @@ public class RaftMessage {
     private int destination;
     private long term;
 
+    public long getConfigId() {
+        return configId;
+    }
+
+    public void setConfigId(long configId) {
+        this.configId = configId;
+    }
+
+    private long configId;
+
     public RaftMessageType getMessageType() {
         return messageType;
     }
