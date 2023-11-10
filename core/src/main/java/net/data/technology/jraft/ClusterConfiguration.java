@@ -16,7 +16,10 @@
 
 package net.data.technology.jraft;
 
+import com.vrg.rapid.pb.Endpoint;
+
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -29,6 +32,7 @@ import java.util.List;
 public class ClusterConfiguration {
 
     private long logIndex;
+    // TODO remove
     private long lastLogIndex;
     private List<ClusterServer> servers;
 
@@ -37,6 +41,25 @@ public class ClusterConfiguration {
         this.logIndex = 0;
         this.lastLogIndex = 0;
     }
+
+    public ClusterConfiguration(List<Endpoint> endpoints, long lastLogIndex) {
+        this.setLastLogIndex(0); //TODO not needed, previously did newConfig.setLastLogIndex(this.config.getLogIndex());
+        this.setLastLogIndex(lastLogIndex);
+        this.servers = new LinkedList<>();
+
+        for (Endpoint endpoint : endpoints) {
+            ClusterServer server = new ClusterServer();
+
+            server.setId(endpoint.getPort() % 8500);
+            String endpoint_str = String.format("tcp://%s:90%02d", endpoint.getHostname().toString(StandardCharsets.UTF_8), server.getId());
+            server.setEndpoint(endpoint_str);
+            System.out.println("server id = " + server.getId());
+            System.out.println("setting endpint to string " + endpoint_str);
+
+            servers.add(server);
+        }
+    }
+
 
     /**
      * De-serialize the data stored in buffer to cluster configuration

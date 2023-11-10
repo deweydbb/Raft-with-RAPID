@@ -37,6 +37,7 @@ public class RaftServer implements RaftMessageHandler {
     };
     private final RaftContext context;
     private ScheduledFuture<?> scheduledElection;
+    // Map is not thread safe
     private final Map<Integer, PeerServer> peers = new HashMap<Integer, PeerServer>();
     private final Set<Integer> votedServers = new HashSet<>();
     private ServerRole role;
@@ -124,6 +125,8 @@ public class RaftServer implements RaftMessageHandler {
         }
 
         joinCluster(5);
+        ClusterConfiguration newConfig = new ClusterConfiguration(cluster.getMemberlist(), this.logStore.getFirstAvailableIndex());
+        reconfigure(newConfig);
 
         this.quickCommitIndex = this.state.getCommitIndex();
         this.commitingThread = new CommittingThread(this);
@@ -155,6 +158,7 @@ public class RaftServer implements RaftMessageHandler {
                     this::onKicked);
 
             configId = cluster.getConfigurationId();
+            logger.debug("set configId = %d", configId);
         } catch (IOException | InterruptedException e) {
             logger.warning("Failed to join cluster with exception {}", e);
             if (numRetries == 0) {
@@ -191,6 +195,11 @@ public class RaftServer implements RaftMessageHandler {
         System.out.println("view change id " + viewChange.getConfigurationId());
 
         this.configId = viewChange.getConfigurationId();
+        logger.debug("set configId = %d", configId);
+
+        ClusterConfiguration newConfig = new ClusterConfiguration(viewChange.getMembership(), this.logStore.getFirstAvailableIndex());
+
+        reconfigure(newConfig);
     }
 
     public RaftMessageSender createMessageSender() {
@@ -256,7 +265,7 @@ public class RaftServer implements RaftMessageHandler {
 
         RaftResponseMessage response = new RaftResponseMessage();
         response.setMessageType(RaftMessageType.AppendEntriesResponse);
-        response.setTerm(this.state.getTerm());        response.setConfigId(this.configId);
+        response.setTerm(this.state.getTerm());
         response.setSource(this.id);
         response.setDestination(request.getSource());
         response.setConfigId(this.configId);
@@ -264,6 +273,8 @@ public class RaftServer implements RaftMessageHandler {
         // After a snapshot the request.getLastLogIndex() may less than logStore.getStartingIndex() but equals to logStore.getStartingIndex() -1
         // In this case, log is Okay if request.getLastLogIndex() == lastSnapshot.getLastLogIndex() && request.getLastLogTerm() == lastSnapshot.getLastTerm()
         boolean configOkay = this.configId == request.getConfigId();
+        logger.info("handleAppendEntriesRequest this config id %d", this.configId);
+        logger.info("handleAppendEntriesRequest request config id %d", request.getConfigId());
         boolean logOkay = request.getLastLogIndex() == 0 ||
                 (request.getLastLogIndex() < this.logStore.getFirstAvailableIndex() &&
                         request.getLastLogTerm() == this.termForLastLog(request.getLastLogIndex()));
@@ -346,6 +357,8 @@ public class RaftServer implements RaftMessageHandler {
         response.setConfigId(this.configId);
 
         boolean sameConfigId = this.configId == request.getConfigId();
+        logger.info("handleVoteRequest this config id %d", this.configId);
+        logger.info("handleVoteRequest request config id %d", request.getConfigId());
         boolean logOkay = request.getLastLogTerm() > this.logStore.getLastLogEntry().getTerm() ||
                 (request.getLastLogTerm() == this.logStore.getLastLogEntry().getTerm() &&
                         this.logStore.getFirstAvailableIndex() - 1 <= request.getLastLogIndex());
@@ -451,6 +464,7 @@ public class RaftServer implements RaftMessageHandler {
         if (this.votesGranted > (this.peers.size() + 1) / 2) {
             this.electionCompleted = true;
             this.becomeLeader();
+            logger.info("We have just become the leader and are exiting requestVote");
             return;
         }
 
@@ -463,7 +477,7 @@ public class RaftServer implements RaftMessageHandler {
             request.setLastLogTerm(this.termForLastLog(this.logStore.getFirstAvailableIndex() - 1));
             request.setTerm(this.state.getTerm());
             request.setConfigId(this.configId);
-            this.logger.debug("send %s to server %d with term %d", RaftMessageType.RequestVoteRequest.toString(), peer.getId(), this.state.getTerm());
+            this.logger.debug("send %s to server %d with term %d, config %d", RaftMessageType.RequestVoteRequest.toString(), peer.getId(), this.state.getTerm(), request.getConfigId());
             peer.SendRequest(request).whenCompleteAsync(this::handlePeerResponse, this.context.getScheduledExecutor());
         }
     }
@@ -774,6 +788,7 @@ public class RaftServer implements RaftMessageHandler {
         requestMessage.setLogEntries(logEntries);
         requestMessage.setCommitIndex(commitIndex);
         requestMessage.setTerm(term);
+        requestMessage.setConfigId(configId);
         return requestMessage;
     }
 
@@ -798,7 +813,7 @@ public class RaftServer implements RaftMessageHandler {
                 serversRemoved.add(id);
             }
         }
-
+        // TODO david thinks not necessary
         if (newConfig.getServer(this.id) == null) {
             serversRemoved.add(this.id);
         }
@@ -1074,6 +1089,7 @@ public class RaftServer implements RaftMessageHandler {
         response.setAccepted(true);
         return response;
     }
+
     // idea is get logEntries and apply to their log
     private RaftResponseMessage handleLogSyncRequest(RaftRequestMessage request) {
         LogEntry[] logEntries = request.getLogEntries();
@@ -1137,6 +1153,7 @@ public class RaftServer implements RaftMessageHandler {
 
         this.serverToJoin.SendRequest(request).whenCompleteAsync(this::handleExtendedResponse, this.context.getScheduledExecutor());
     }
+
     // TODO: We won't have this method
     private void inviteServerToJoinCluster() {
         RaftRequestMessage request = new RaftRequestMessage();
@@ -1244,6 +1261,7 @@ public class RaftServer implements RaftMessageHandler {
             this.server = server;
             this.rpcClients = new ConcurrentHashMap<Integer, RpcClient>();
         }
+
         // probably won't need this
         @Override
         public CompletableFuture<Boolean> addServer(ClusterServer server) {
@@ -1254,6 +1272,7 @@ public class RaftServer implements RaftMessageHandler {
             request.setLogEntries(logEntries);
             return this.sendMessageToLeader(request);
         }
+
         // probably won't need this
         @Override
         public CompletableFuture<Boolean> removeServer(int serverId) {
@@ -1334,6 +1353,7 @@ public class RaftServer implements RaftMessageHandler {
             this.server = server;
             this.conditionalLock = new Object();
         }
+
         // external function that notifies via thread when more to commit
         void moreToCommit() {
             synchronized (this.conditionalLock) {
