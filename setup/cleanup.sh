@@ -1,4 +1,5 @@
 #!/bin/bash
+echo "doing cleanup"
 
 for dir in server*/
 do
