@@ -19,6 +19,9 @@ package net.data.technology.jraft;
 import com.google.common.net.HostAndPort;
 import com.vrg.rapid.Cluster;
 import com.vrg.rapid.ClusterStatusChange;
+import com.vrg.rapid.NodeStatusChange;
+import com.vrg.rapid.pb.EdgeStatus;
+import io.grpc.Server;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -132,7 +135,16 @@ public class RaftServer implements RaftMessageHandler {
         this.commitingThread = new CommittingThread(this);
         this.role = ServerRole.Follower;
         new Thread(this.commitingThread).start();
-        this.restartElectionTimer();
+
+        if (leader == -1) {
+            // we get append entries, set leader
+            this.restartElectionTimer();
+            // TODO: Not using locks, but if something goes wrong relates to this, we might need to use locks
+            if (leader != -1) {
+                stopElectionTimer();
+            }
+        }
+
         this.logger.info("Server %d started", this.id);
     }
 
@@ -200,6 +212,19 @@ public class RaftServer implements RaftMessageHandler {
         ClusterConfiguration newConfig = new ClusterConfiguration(viewChange.getMembership(), this.logStore.getFirstAvailableIndex());
 
         reconfigure(newConfig);
+
+        // if server is leader and new servers have joined, send appendEntries requests to let them know who the leader is
+        if (role == ServerRole.Leader && viewChange.getDelta().stream().map(NodeStatusChange::getStatus).anyMatch(x -> x == EdgeStatus.UP)) {
+            // hey I am the leader
+            this.requestAppendEntries();
+        }
+
+        // we need to know who current leader is and if new leader is not in new config, then we start randomized election timeout, and once that timeouts we call handle election timeout method
+        if (!peers.containsKey(leader)) {
+            logger.debug("Last known leader %d is not in new config, starting election timeout", leader);
+            // last known leader is NOT in the new config, start randomized election timeout
+            restartElectionTimer();
+        }
     }
 
     public RaftMessageSender createMessageSender() {
@@ -259,7 +284,8 @@ public class RaftServer implements RaftMessageHandler {
                 this.logger.error("Receive AppendEntriesRequest from another leader(%d) with same term, there must be a bug, server exits", request.getSource());
                 this.stateMachine.exit(-1);
             } else {
-                this.restartElectionTimer();
+                // TODO: make sure not necessary
+                //this.restartElectionTimer();
             }
         }
 
@@ -334,6 +360,8 @@ public class RaftServer implements RaftMessageHandler {
         }
 
         this.leader = request.getSource();
+        // TODO: make sure this is the right place for stopElectionTimer
+        stopElectionTimer();
         this.commit(request.getCommitIndex());
         response.setAccepted(true);
         response.setNextIndex(request.getLastLogIndex() + (request.getLogEntries() == null ? 0 : request.getLogEntries().length) + 1);
@@ -618,14 +646,14 @@ public class RaftServer implements RaftMessageHandler {
 
     // TODO: leader does not need to send heartbeats, so this function should never be called
     private synchronized void handleHeartbeatTimeout(PeerServer peer) {
-        this.logger.debug("Heartbeat timeout for %d", peer.getId());
+        this.logger.debug("THIS SHOULD NEVER BE CALLED Heartbeat timeout for %d", peer.getId());
         if (this.role == ServerRole.Leader) {
             this.requestAppendEntries(peer);
 
             synchronized (peer) {
                 if (peer.isHeartbeatEnabled()) {
                     // Schedule another heartbeat if heartbeat is still enabled
-                    peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
+                    //peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
                 } else {
                     this.logger.debug("heartbeat is disabled for peer %d", peer.getId());
                 }
@@ -638,6 +666,7 @@ public class RaftServer implements RaftMessageHandler {
     private void restartElectionTimer() {
         // don't start the election timer while this server is still catching up the logs
         if (this.catchingUp) {
+            logger.error("Error, ignoring restartElection timer due to catching up instance variable, which should be false");
             return;
         }
 
@@ -648,7 +677,9 @@ public class RaftServer implements RaftMessageHandler {
         RaftParameters parameters = this.context.getRaftParameters();
         int electionTimeout = parameters.getElectionTimeoutLowerBound() + this.random.nextInt(parameters.getElectionTimeoutUpperBound() - parameters.getElectionTimeoutLowerBound() + 1);
         // Schedule when election happens based off randomized timeout
+        this.logger.info("About to call schedule(this electionTimeoutTask in restartElectionTimer");
         this.scheduledElection = this.context.getScheduledExecutor().schedule(this.electionTimeoutTask, electionTimeout, TimeUnit.MILLISECONDS);
+        logger.info("Returning from restartElection Timeout");
     }
 
     private void stopElectionTimer() {
@@ -659,6 +690,7 @@ public class RaftServer implements RaftMessageHandler {
 
         this.scheduledElection.cancel(false);
         this.scheduledElection = null;
+        logger.info("Canceled election timer");
     }
 
     private void becomeLeader() {
@@ -669,23 +701,27 @@ public class RaftServer implements RaftMessageHandler {
         for (PeerServer server : this.peers.values()) {
             server.setNextLogIndex(this.logStore.getFirstAvailableIndex());
             server.setFree();
-            this.enableHeartbeatForPeer(server);
+            // this.enableHeartbeatForPeer(server);
         }
 
         // if current config is not committed, try to commit it
-        if (this.config.getLogIndex() == 0) {
-            this.config.setLogIndex(this.logStore.getFirstAvailableIndex());
-            // TODO we probably no longer need this because Raft delegates configuration to from logstore RAPID
-            this.logStore.append(new LogEntry(this.state.getTerm(), this.config.toBytes(), LogValueType.Configuration));
-            this.logger.info("add initial configuration to log store");
-            this.configChanging = true;
-        }
+        //TODO make sure this code is not needed
+//        if (this.config.getLogIndex() == 0) {
+//            this.config.setLogIndex(this.logStore.getFirstAvailableIndex());
+//            // TODO we probably no longer need this because Raft delegates configuration to from logstore RAPID
+//            this.logStore.append(new LogEntry(this.state.getTerm(), this.config.toBytes(), LogValueType.Configuration));
+//            this.logger.info("add initial configuration to log store");
+//            this.configChanging = true;
+//        }
         // hey I've become leader
         this.requestAppendEntries();
+        System.out.println("I have become the leader");
+        logger.info("End of become leader");
     }
 
     // TODO: we can probably delete because don't need to call
     private void enableHeartbeatForPeer(PeerServer peer) {
+        logger.error("Enable heartbeat for peer should NEVER be called");
         peer.enableHeartbeat(true);
         peer.resumeHeartbeatingSpeed();
         peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
@@ -695,6 +731,7 @@ public class RaftServer implements RaftMessageHandler {
         // stop heartbeat for all peers
         for (PeerServer server : this.peers.values()) {
             if (server.getHeartbeatTask() != null) {
+                logger.error("Canceling heartbeat task on perr, THIS SHOULD NEVER BE CALLED");
                 server.getHeartbeatTask().cancel(false);
             }
 
@@ -703,6 +740,8 @@ public class RaftServer implements RaftMessageHandler {
 
         this.serverToJoin = null;
         this.role = ServerRole.Follower;
+        // TODO: do we want to restart the election timer here
+        logger.info("Becoming follower, restarting election timer");
         this.restartElectionTimer();
     }
 
@@ -826,9 +865,10 @@ public class RaftServer implements RaftMessageHandler {
                 this.logger.info("server %d is added to cluster", peer.getId());
                 // TODO: Will probaly no longer need so delete
                 if (this.role == ServerRole.Leader) {
-                    this.logger.info("enable heartbeating for server %d", peer.getId());
-                    this.enableHeartbeatForPeer(peer);
+                    //this.logger.info("enable heartbeating for server %d", peer.getId());
+                    //this.enableHeartbeatForPeer(peer);
                     if (this.serverToJoin != null && this.serverToJoin.getId() == peer.getId()) {
+                        logger.info("SERVER TO JOIN IS NOT NULL IN RECONFIGURE, THIS SHOULD NOT HAPPEN");
                         peer.setNextLogIndex(this.serverToJoin.getNextLogIndex());
                         this.serverToJoin = null;
                     }
@@ -850,6 +890,7 @@ public class RaftServer implements RaftMessageHandler {
                 this.logger.info("peer %d cannot be found in current peer list", id);
             } else {
                 if (peer.getHeartbeatTask() != null) {
+                    logger.info("THIS SHOULD NEVER BE RUN, canceling heartbeat task");
                     peer.getHeartbeatTask().cancel(false);
                 }
 
@@ -1052,6 +1093,7 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private RaftResponseMessage handleAddServerRequest(RaftRequestMessage request) {
+        logger.info("THIS FUNCTION SHOULD NEVER BE CALLED");
         LogEntry[] logEntries = request.getLogEntries();
         RaftResponseMessage response = new RaftResponseMessage();
         response.setSource(this.id);
@@ -1169,6 +1211,7 @@ public class RaftServer implements RaftMessageHandler {
 
     // tODO: Change this to be more for our rapid invariant
     private RaftResponseMessage handleJoinClusterRequest(RaftRequestMessage request) {
+        logger.info("THIS SHOULD NOT BE CALLED IN OUR RAFT RAPID IMPLEMENTATION");
         LogEntry[] logEntries = request.getLogEntries();
         RaftResponseMessage response = new RaftResponseMessage();
         response.setSource(this.id);
