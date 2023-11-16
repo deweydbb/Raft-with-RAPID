@@ -29,6 +29,7 @@ public class RaftConsensus {
         RaftMessageSender messageSender = server.createMessageSender();
         context.getStateMachine().start(messageSender);
         context.getRpcListener().startListening(server);
+        server.startRapid();
 
         return messageSender;
     }

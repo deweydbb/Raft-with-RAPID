@@ -25,14 +25,14 @@ public interface RaftMessageSender {
      * @param server new member of cluster
      * @return true if request is accepted, or false if no leader, rpc fails or leader declines
      */
-    CompletableFuture<Boolean> addServer(ClusterServer server);
+    //CompletableFuture<Boolean> addServer(ClusterServer server);
 
     /**
      * Remove a server from cluster, the server will step down when the removal is confirmed
      * @param serverId the id for the server to be removed
      * @return true if request is accepted or false if no leader, rpc fails or leader declines
      */
-    CompletableFuture<Boolean> removeServer(int serverId);
+    //CompletableFuture<Boolean> removeServer(int serverId);
 
     /**
      * Append multiple application logs to log store
