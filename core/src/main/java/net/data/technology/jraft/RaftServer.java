@@ -122,7 +122,7 @@ public class RaftServer implements RaftMessageHandler {
 
         for (ClusterServer server : this.config.getServers()) {
             if (server.getId() != this.id) {
-                this.peers.put(server.getId(), new PeerServer(server, context, this::handleHeartbeatTimeout));
+                this.peers.put(server.getId(), new PeerServer(server, context/*, this::handleHeartbeatTimeout*/));
             }
         }
 
@@ -668,23 +668,23 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     // TODO: leader does not need to send heartbeats, so this function should never be called
-    private synchronized void handleHeartbeatTimeout(PeerServer peer) {
-        this.logger.debug("THIS SHOULD NEVER BE CALLED Heartbeat timeout for %d", peer.getId());
-        if (this.role == ServerRole.Leader) {
-            this.requestAppendEntries(peer);
-
-            synchronized (peer) {
-                if (peer.isHeartbeatEnabled()) {
-                    // Schedule another heartbeat if heartbeat is still enabled
-                    //peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
-                } else {
-                    this.logger.debug("heartbeat is disabled for peer %d", peer.getId());
-                }
-            }
-        } else {
-            this.logger.info("Receive a heartbeat event for %d while no longer as a leader", peer.getId());
-        }
-    }
+//    private synchronized void handleHeartbeatTimeout(PeerServer peer) {
+//        this.logger.debug("THIS SHOULD NEVER BE CALLED Heartbeat timeout for %d", peer.getId());
+//        if (this.role == ServerRole.Leader) {
+//            this.requestAppendEntries(peer);
+//
+//            synchronized (peer) {
+//                if (peer.isHeartbeatEnabled()) {
+//                    // Schedule another heartbeat if heartbeat is still enabled
+//                    //peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
+//                } else {
+//                    this.logger.debug("heartbeat is disabled for peer %d", peer.getId());
+//                }
+//            }
+//        } else {
+//            this.logger.info("Receive a heartbeat event for %d while no longer as a leader", peer.getId());
+//        }
+//    }
 
     private void restartElectionTimer() {
         // don't start the election timer while this server is still catching up the logs
@@ -743,12 +743,12 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     // TODO: we can probably delete because don't need to call
-    private void enableHeartbeatForPeer(PeerServer peer) {
-        logger.error("Enable heartbeat for peer should NEVER be called");
-        peer.enableHeartbeat(true);
-        peer.resumeHeartbeatingSpeed();
-        peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
-    }
+//    private void enableHeartbeatForPeer(PeerServer peer) {
+//        logger.error("Enable heartbeat for peer should NEVER be called");
+//        peer.enableHeartbeat(true);
+//        peer.resumeHeartbeatingSpeed();
+//        peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
+//    }
 
     private void becomeFollower() {
         // stop heartbeat for all peers
@@ -882,7 +882,7 @@ public class RaftServer implements RaftMessageHandler {
 
         for (ClusterServer server : serversAdded) {
             if (server.getId() != this.id) {
-                PeerServer peer = new PeerServer(server, context, this::handleHeartbeatTimeout);
+                PeerServer peer = new PeerServer(server, context /*, this::handleHeartbeatTimeout*/);
                 peer.setNextLogIndex(this.logStore.getFirstAvailableIndex());
                 this.peers.put(server.getId(), peer);
                 this.logger.info("server %d is added to cluster", peer.getId());
@@ -967,7 +967,7 @@ public class RaftServer implements RaftMessageHandler {
                 this.serverToJoin.setMatchedIndex(response.getNextIndex() - 1);
                 this.syncLogsToNewComingServer(response.getNextIndex());
             }
-        } else if (response.getMessageType() == RaftMessageType.JoinClusterResponse) {
+        } /*else if (response.getMessageType() == RaftMessageType.JoinClusterResponse) {
             if (this.serverToJoin != null) {
                 if (response.isAccepted()) {
                     this.logger.debug("new server confirms it will join, start syncing logs to it");
@@ -986,7 +986,7 @@ public class RaftServer implements RaftMessageHandler {
 
             this.logger.debug("peer accepted to stepping down, removing this server from cluster");
             this.removeServerFromCluster(response.getSource());
-        } else {
+        }*/ else {
             // No more response message types need to be handled
             this.logger.error("received an unexpected response message type %s, for safety, stepping down", response.getMessageType());
             this.stateMachine.exit(-1);

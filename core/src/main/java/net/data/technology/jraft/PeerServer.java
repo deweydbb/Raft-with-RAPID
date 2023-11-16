@@ -39,14 +39,14 @@ public class PeerServer {
     private int maxHeartbeatInterval;
     private AtomicInteger busyFlag;
     private AtomicInteger pendingCommitFlag;
-    private Callable<Void> heartbeatTimeoutHandler;
+    //private Callable<Void> heartbeatTimeoutHandler;
     private ScheduledFuture<?> heartbeatTask;
     private long nextLogIndex;
     private long matchedIndex;
     private boolean heartbeatEnabled;
     private Executor executor;
 
-    public PeerServer(ClusterServer server, RaftContext context, final Consumer<PeerServer> heartbeatConsumer) {
+    public PeerServer(ClusterServer server, RaftContext context/*, final Consumer<PeerServer> heartbeatConsumer*/) {
         this.clusterConfig = server;
         this.rpcClient = context.getRpcClientFactory().createRpcClient(server.getEndpoint());
         this.busyFlag = new AtomicInteger(0);
@@ -59,15 +59,15 @@ public class PeerServer {
         this.matchedIndex = 0;
         this.heartbeatEnabled = false;
         this.executor = context.getScheduledExecutor();
-        PeerServer self = this;
-        this.heartbeatTimeoutHandler = new Callable<Void>() {
-
-            @Override
-            public Void call() throws Exception {
-                heartbeatConsumer.accept(self);
-                return null;
-            }
-        };
+//        PeerServer self = this;
+//        this.heartbeatTimeoutHandler = new Callable<Void>() {
+//
+//            @Override
+//            public Void call() throws Exception {
+//                heartbeatConsumer.accept(self);
+//                return null;
+//            }
+//        };
     }
 
     public int getId() {
@@ -78,17 +78,17 @@ public class PeerServer {
         return this.clusterConfig;
     }
 
-    public Callable<Void> getHeartbeartHandler() {
-        return this.heartbeatTimeoutHandler;
-    }
+//    public Callable<Void> getHeartbeartHandler() {
+//        return this.heartbeatTimeoutHandler;
+//    }
 
     public synchronized int getCurrentHeartbeatInterval() {
         return this.currentHeartbeatInterval;
     }
 
-    public void setHeartbeatTask(ScheduledFuture<?> heartbeatTask) {
-        this.heartbeatTask = heartbeatTask;
-    }
+//    public void setHeartbeatTask(ScheduledFuture<?> heartbeatTask) {
+//        this.heartbeatTask = heartbeatTask;
+//    }
 
     public ScheduledFuture<?> getHeartbeatTask() {
         return this.heartbeatTask;
