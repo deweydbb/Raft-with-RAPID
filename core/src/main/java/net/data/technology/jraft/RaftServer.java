@@ -1166,10 +1166,14 @@ public class RaftServer implements RaftMessageHandler {
         response.setTerm(this.state.getTerm());
         response.setConfigId(configId);
 
-        LogEntry[] logEntries = new LogEntry[1];
-        logEntries[0] = new LogEntry(this.state.getTerm(), config.toBytes(), LogValueType.Configuration);
-        response.setLogEntries(logEntries);
-        response.setAccepted(true);
+        if (config != null) {
+            LogEntry[] logEntries = new LogEntry[1];
+            logEntries[0] = new LogEntry(this.state.getTerm(), config.toBytes(), LogValueType.Configuration);
+            response.setLogEntries(logEntries);
+            response.setAccepted(true);
+        } else {
+            response.setAccepted(false);
+        }
 
         logger.info("handleGetClusterRequest returning cluster: " + config);
         return response;

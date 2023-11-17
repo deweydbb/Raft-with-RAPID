@@ -20,8 +20,8 @@ package net.data.technology.jraft.extensions;
 import net.data.technology.jraft.LogEntry;
 import net.data.technology.jraft.LogValueType;
 import net.data.technology.jraft.SequentialLogStore;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.*;
 import java.nio.ByteBuffer;

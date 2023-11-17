@@ -16,7 +16,8 @@
 
 package net.data.technology.jraft.extensions;
 
-import org.apache.log4j.Logger;
+
+import org.apache.logging.log4j.Logger;
 
 public class Log4jLogger implements net.data.technology.jraft.Logger {
 

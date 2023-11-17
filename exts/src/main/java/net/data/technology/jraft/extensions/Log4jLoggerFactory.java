@@ -18,7 +18,7 @@ package net.data.technology.jraft.extensions;
 
 import net.data.technology.jraft.Logger;
 import net.data.technology.jraft.LoggerFactory;
-import org.apache.log4j.LogManager;
+import org.apache.logging.log4j.LogManager;
 
 public class Log4jLoggerFactory implements LoggerFactory {
 

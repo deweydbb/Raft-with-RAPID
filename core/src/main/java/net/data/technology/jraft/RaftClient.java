@@ -92,6 +92,8 @@ public class RaftClient {
                             future.complete(null);
                         }
 
+                    } else {
+                        tryAnyNode(request, future, iterator);
                     }
                 } else {
                     logger.info("rpc error, failed to send request to remote server (%s)", error.getMessage());
