@@ -38,18 +38,18 @@ public abstract class JraftServletListener implements RpcListener, ServletContex
         return (RaftMessageSender) context.getAttribute(JRAFT_MESSAGE_SENDER);
     }
 
-    @Override
-    public void contextInitialized(ServletContextEvent sce) {
-        this.servletContext = sce.getServletContext();
-        RaftContext context = new RaftContext(
-                this.getServerStateManager(),
-                this.getStateMachine(),
-                this.getParameters(),
-                this,
-                this.getLoggerFactory(),
-                new HttpRpcClientFactory());
-        this.servletContext.setAttribute(JRAFT_MESSAGE_SENDER, RaftConsensus.run(context));
-    }
+//     @Override
+//     public void contextInitialized(ServletContextEvent sce) {
+//         this.servletContext = sce.getServletContext();
+//         RaftContext context = new RaftContext(
+//                 this.getServerStateManager(),
+//                 this.getStateMachine(),
+//                 this.getParameters(),
+//                 this,
+//                 this.getLoggerFactory(),
+//                 new HttpRpcClientFactory());
+//         this.servletContext.setAttribute(JRAFT_MESSAGE_SENDER, RaftConsensus.run(context));
+//     }
 
     @Override
     public void contextDestroyed(ServletContextEvent sce) {

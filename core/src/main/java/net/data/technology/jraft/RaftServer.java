@@ -44,6 +44,7 @@ public class RaftServer implements RaftMessageHandler {
     private ServerRole role;
     private ServerState state;
     private int leader;
+    private int serverSize;
     private final int id;
     private int votesGranted;
     private boolean electionCompleted;
@@ -73,6 +74,7 @@ public class RaftServer implements RaftMessageHandler {
         this.logStore = context.getServerStateManager().loadLogStore();
         this.config = context.getServerStateManager().loadClusterConfiguration();
         this.stateMachine = context.getStateMachine();
+        this.serverSize = context.getServerSize();
         this.votesGranted = 0;
         this.leader = -1;
         this.electionCompleted = false;
@@ -511,8 +513,9 @@ public class RaftServer implements RaftMessageHandler {
         this.votesGranted += 1;
         this.votedServers.add(this.id);
 
-        // this is the only server?
-        if (this.votesGranted > (this.peers.size() + 1) / 2) {
+        // TODO change to use serverSize
+        // Am i the only server in the cluster
+        if (this.votesGranted > (serverSize + 1) / 2) {
             this.electionCompleted = true;
             this.becomeLeader();
             logger.info("We have just become the leader and are exiting requestVote");
@@ -534,7 +537,9 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private void requestAppendEntries() {
-        if (this.peers.size() == 0) {
+        // TODO use ServerSize
+        //if (this.peers.size() == 0) {
+        if (serverSize == 1) {
             this.commit(this.logStore.getFirstAvailableIndex() - 1);
             return;
         }
@@ -618,7 +623,9 @@ public class RaftServer implements RaftMessageHandler {
             }
 
             matchedIndexes.sort(indexComparator);
-            this.commit(matchedIndexes.get((this.peers.size() + 1) / 2));
+            this.commit(matchedIndexes.get((serverSize + 1) / 2));
+
+//             this.commit(matchedIndexes.get((this.peers.size() + 1) / 2));
             needToCatchup = peer.clearPendingCommit() || response.getNextIndex() < this.logStore.getFirstAvailableIndex();
         } else {
             synchronized (peer) {
@@ -655,12 +662,15 @@ public class RaftServer implements RaftMessageHandler {
             this.votesGranted += 1;
         }
 
-        if (this.votedServers.size() >= this.peers.size() + 1) {
+        // TODO use server size
+        // if (this.votedServers.size() >= peers.size() + 1)
+        if (this.votedServers.size() >= serverSize) {
             this.electionCompleted = true;
         }
 
         // got a majority set of granted votes
-        if (this.votesGranted > (this.peers.size() + 1) / 2) {
+        if (this.votesGranted > (serverSize + 1) / 2) {
+            // if (this.votesGranted > (this.peers.size() + 1) / 2) {
             this.logger.info("Server is elected as leader for term %d", this.state.getTerm());
             this.electionCompleted = true;
             this.becomeLeader();
@@ -1012,7 +1022,7 @@ public class RaftServer implements RaftMessageHandler {
                 if (server != null) {
                     if (server.getCurrentHeartbeatInterval() >= this.context.getRaftParameters().getMaxHeartbeatInterval()) {
                         if (request.getMessageType() == RaftMessageType.LeaveClusterRequest) {
-                            this.logger.info("rpc failed again for the removing server (%d), will remove this server directly", server.getId());
+                            this.logger.error("rpc failed again for the removing server (%d), will remove this server directly", server.getId());
 
                             /**
                              * In case of there are only two servers in the cluster, it safe to remove the server directly from peers

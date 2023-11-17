@@ -27,18 +27,20 @@ public class RaftContext {
     private final StateMachine stateMachine;
     private RaftParameters raftParameters;
     private ScheduledThreadPoolExecutor scheduledExecutor;
+    private int serverSize;
 
-    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory) {
-        this(stateManager, stateMachine, raftParameters, rpcListener, logFactory, rpcClientFactory, null);
+    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, int serverSize) {
+        this(stateManager, stateMachine, raftParameters, rpcListener, logFactory, rpcClientFactory, serverSize, null);
     }
 
-    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, ScheduledThreadPoolExecutor scheduledExecutor) {
+    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, int serverSize, ScheduledThreadPoolExecutor scheduledExecutor) {
         this.serverStateManager = stateManager;
         this.stateMachine = stateMachine;
         this.raftParameters = raftParameters;
         this.rpcClientFactory = rpcClientFactory;
         this.rpcListener = rpcListener;
         this.loggerFactory = logFactory;
+        this.serverSize = serverSize;
         this.scheduledExecutor = scheduledExecutor;
         if (this.scheduledExecutor == null) {
             this.scheduledExecutor = new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
@@ -72,6 +74,9 @@ public class RaftContext {
         return rpcClientFactory;
     }
 
+    public int getServerSize() {
+        return this.serverSize;
+        }
     public StateMachine getStateMachine() {
         return stateMachine;
     }

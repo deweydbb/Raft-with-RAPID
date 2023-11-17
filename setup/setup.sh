@@ -5,14 +5,17 @@ if [ $# -eq 0 ]
     ./cleanup.sh
 fi
 
-for i in 1 2 3
+START=1
+NUM_SERVERS=3
+
+for (( i=START; i<=NUM_SERVERS; i++))
 do
   mkdir "server${i}"
   cp init-cluster.json "./server${i}/cluster.json"
   echo "server.id=${i}" > "./server${i}/config.properties"
   echo "start server${i}"
   cd "./server${i}" || exit
-  gnome-terminal --title="server${i}" -- ../runServer.sh "$i"
+  gnome-terminal --title="server${i}" -- ../runServer.sh "$i" "$NUM_SERVERS"
   cd ..
 done
 

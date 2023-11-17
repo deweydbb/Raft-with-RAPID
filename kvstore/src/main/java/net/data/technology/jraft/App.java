@@ -28,10 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.StringTokenizer;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
@@ -68,6 +65,13 @@ public class App {
         if (args.length >= 3) {
             port = Integer.parseInt(args[2]);
         }
+
+        int serverSize = 3;
+        if (args.length >= 4) {
+            System.out.println("Input args: " + Arrays.toString(args));
+            serverSize = Integer.parseInt(args[3]);
+        }
+
         URI localEndpoint = new URI(config.getServer(stateManager.getServerId()).getEndpoint());
         RaftParameters raftParameters = new RaftParameters()
                 .withElectionTimeoutUpper(5000)
@@ -85,6 +89,7 @@ public class App {
                 new RpcTcpListener(localEndpoint.getPort(), executor),
                 new Log4jLoggerFactory(),
                 new RpcTcpClientFactory(executor),
+                serverSize,
                 executor);
         RaftConsensus.run(context);
         System.out.println("Press Enter to exit.");

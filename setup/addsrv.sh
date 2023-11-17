@@ -1,8 +1,8 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]
+if [ $# -ne 2 ]
   then
-    echo "Server id is required"
+    echo "Server id and number of servers in the cluster is required"
     exit
 fi
 
@@ -16,6 +16,6 @@ echo "{\"logIndex\":0,\"lastLogIndex\":0,\"servers\":[{\"id\": $1,\"endpoint\": 
 echo "server.id=$1" > "./server$1/config.properties"
 echo "start server$1"
 cd "./server$1" || exit
-gnome-terminal --title="server$1" -- java -jar ../kvstore.jar server "." "800$1"
+gnome-terminal --title="server$1" -- java -jar ../kvstore.jar server "." "800$1" "$2"
 cd ..
 
