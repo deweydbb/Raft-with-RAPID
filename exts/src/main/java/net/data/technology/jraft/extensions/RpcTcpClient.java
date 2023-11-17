@@ -129,14 +129,43 @@ public class RpcTcpClient implements RpcClient {
             }
         }
 
+        logger.info("about to read response");
+
         CompletionHandler<Integer, AsyncTask<ByteBuffer>> handler = handlerFrom((Integer bytesRead, AsyncTask<ByteBuffer> context) -> {
             if (bytesRead.intValue() < BinaryUtils.RAFT_RESPONSE_HEADER_SIZE) {
                 logger.info("failed to read response from remote server.");
                 context.future.completeExceptionally(new IOException("Only part of the response data could be read"));
                 closeSocket();
             } else {
-                RaftResponseMessage response = BinaryUtils.bytesToResponseMessage(context.input.array());
-                context.future.complete(response);
+                try {
+                    Pair<RaftResponseMessage, Integer> responseInfo = BinaryUtils.bytesToResponseMessage(context.input.array());
+                    RaftResponseMessage response = responseInfo.getFirst();
+
+                    logger.info("read header, about to read log entries " + responseInfo.getSecond());
+
+                    if(responseInfo.getSecond() > 0){
+                        ByteBuffer logBuffer = ByteBuffer.allocate(responseInfo.getSecond());
+                        AsyncUtility.readFromChannel(connection, logBuffer, null, handlerFrom((Integer size, AsyncTask<ByteBuffer> attachment) -> {
+                            if(size < responseInfo.getSecond()){
+                                logger.info("failed to read the log entries data from server socket");
+                                closeSocket();
+                            }else{
+                                try{
+                                    response.setLogEntries(BinaryUtils.bytesToLogEntries(logBuffer.array()));
+                                    context.future.complete(response);
+                                }catch(Throwable error){
+                                    logger.info("log entries parsing error", error);
+                                    context.future.complete(response);
+                                    closeSocket();
+                                }
+                            }
+                        }));
+                    } else {
+                        context.future.complete(response);
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to read response with exception %s", e);
+                }
             }
 
             int waitingReaders = this.readers.decrementAndGet();

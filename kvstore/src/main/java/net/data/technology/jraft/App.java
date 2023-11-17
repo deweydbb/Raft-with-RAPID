@@ -98,27 +98,16 @@ public class App {
         while (true) {
             System.out.print("Message:");
             String message = reader.readLine();
-            if (message.startsWith("addsrv")) {
-                StringTokenizer tokenizer = new StringTokenizer(message, ";");
-                ArrayList<String> values = new ArrayList<String>();
-                while (tokenizer.hasMoreTokens()) {
-                    values.add(tokenizer.nextToken());
+
+            if (message.startsWith("config")) {
+                ClusterConfiguration newConfig = client.getClusterConfig().get();
+                if (newConfig != null) {
+                    configuration = newConfig;
+                    System.out.println("Config: " + configuration.getServers());
+                } else {
+                    System.out.println("Config:" + null);
                 }
 
-                if (values.size() == 3) {
-                    ClusterServer server = new ClusterServer();
-                    server.setEndpoint(values.get(2));
-                    server.setId(Integer.parseInt(values.get(1)));
-                    boolean accepted = client.addServer(server).get();
-                    System.out.println("Accepted: " + String.valueOf(accepted));
-                    continue;
-                }
-            } else if (message.startsWith("rmsrv:")) {
-                String text = message.substring(6);
-                int serverId = Integer.parseInt(text.trim());
-                boolean accepted = client.removeServer(serverId).get();
-                System.out.println("Accepted: " + String.valueOf(accepted));
-                continue;
             }
 
             if (message.startsWith("put")) {
@@ -135,8 +124,15 @@ public class App {
                 String[] split = message.split(":");
                 String key = split[0];
                 ClusterServer server;
+
                 if (split.length > 1) {
-                    server = configuration.getServer(Integer.parseInt(split[1]));
+                    // user specified a specific server to read from
+                    int serverId = Integer.parseInt(split[1]);
+                    // check to see if config needs to be updated
+                    if (configuration.getServer(serverId) == null) {
+                        configuration = client.getClusterConfig().get();
+                    }
+                    server = configuration.getServer(serverId);
                 } else {
                     // get random server
                     List<ClusterServer> servers = configuration.getServers();
@@ -149,39 +145,43 @@ public class App {
         }
     }
 
-    private static String get(ClusterServer server, String key) throws Exception {
-        String endpoint = server.getEndpoint();
-        endpoint = endpoint.substring(endpoint.lastIndexOf('/') + 1);
+    private static String get(ClusterServer server, String key) {
+        try {
+            String endpoint = server.getEndpoint();
+            endpoint = endpoint.substring(endpoint.lastIndexOf('/') + 1);
 
-        String host = endpoint.split(":")[0];
-        if ("localhost".equals(host)) {
-            host = "127.0.0.1";
+            String host = endpoint.split(":")[0];
+            if ("localhost".equals(host)) {
+                host = "127.0.0.1";
+            }
+            int port = Integer.parseInt(endpoint.split(":")[1]) - 1000;
+
+            Socket socket = new Socket(host, port);
+            OutputStream socketOutputStream = socket.getOutputStream();
+
+            int msgLen = key.getBytes(StandardCharsets.UTF_8).length;
+            byte[] bytes = new byte[msgLen + 4];
+            for (int i = 0; i < 4; ++i) {
+                int value = (msgLen >> (i * 8));
+                bytes[i] = (byte) (value & 0xFF);
+            }
+
+            System.arraycopy(key.getBytes(StandardCharsets.UTF_8), 0, bytes, 4, msgLen);
+            socketOutputStream.write(bytes);
+
+            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+            byte[] msgSize = new byte[4];
+            in.read(msgSize);
+
+            byte[] msg = new byte[little2big(msgSize) - 1];
+            in.read(msg);
+            in.close();
+            socket.close();
+
+            return new String(msg);
+        } catch (Exception e) {
+            return e.toString();
         }
-        int port = Integer.parseInt(endpoint.split(":")[1]) - 1000;
-
-        Socket socket = new Socket(host, port);
-        OutputStream socketOutputStream = socket.getOutputStream();
-
-        int msgLen = key.getBytes(StandardCharsets.UTF_8).length;
-        byte[] bytes = new byte[msgLen + 4];
-        for (int i = 0; i < 4; ++i) {
-            int value = (msgLen >> (i * 8));
-            bytes[i] = (byte) (value & 0xFF);
-        }
-
-        System.arraycopy(key.getBytes(StandardCharsets.UTF_8), 0, bytes, 4, msgLen);
-        socketOutputStream.write(bytes);
-
-        DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-        byte[] msgSize = new byte[4];
-        in.read(msgSize);
-
-        byte[] msg = new byte[little2big(msgSize) - 1];
-        in.read(msg);
-        in.close();
-        socket.close();
-
-        return new String(msg);
     }
 
     private static int little2big(byte[ ] b) {

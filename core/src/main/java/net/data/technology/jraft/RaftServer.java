@@ -938,6 +938,8 @@ public class RaftServer implements RaftMessageHandler {
 //            return this.handleJoinClusterRequest(request);
 //        } else if (request.getMessageType() == RaftMessageType.LeaveClusterRequest) {
 //             return this.handleLeaveClusterRequest(request);
+        } else if (request.getMessageType() == RaftMessageType.GetClusterRequest) {
+          return this.handleGetClusterRequest(request);
         } else {
             this.logger.error("receive an unknown request %s, for safety, step down.", request.getMessageType().toString());
             this.stateMachine.exit(-1);
@@ -1154,6 +1156,24 @@ public class RaftServer implements RaftMessageHandler {
 //        response.setAccepted(true);
 //        return response;
 //    }
+
+    private RaftResponseMessage handleGetClusterRequest(RaftRequestMessage request) {
+        logger.info("start of handleGetClusterRequest");
+        RaftResponseMessage response = new RaftResponseMessage();
+        response.setMessageType(RaftMessageType.GetClusterResponse);
+        response.setSource(this.id);
+        response.setDestination(this.leader);
+        response.setTerm(this.state.getTerm());
+        response.setConfigId(configId);
+
+        LogEntry[] logEntries = new LogEntry[1];
+        logEntries[0] = new LogEntry(this.state.getTerm(), config.toBytes(), LogValueType.Configuration);
+        response.setLogEntries(logEntries);
+        response.setAccepted(true);
+
+        logger.info("handleGetClusterRequest returning cluster: " + config);
+        return response;
+    }
 
     // idea is get logEntries and apply to their log
     private RaftResponseMessage handleLogSyncRequest(RaftRequestMessage request) {

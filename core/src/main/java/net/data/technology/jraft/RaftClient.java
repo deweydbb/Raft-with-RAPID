@@ -22,14 +22,14 @@ import java.util.concurrent.CompletableFuture;
 
 public class RaftClient {
 
-    private Map<Integer, RpcClient> rpcClients = new HashMap<Integer, RpcClient>();
-    private RpcClientFactory rpcClientFactory;
+    private final Map<Integer, RpcClient> rpcClients = new HashMap<Integer, RpcClient>();
+    private final RpcClientFactory rpcClientFactory;
     private ClusterConfiguration configuration;
-    private Logger logger;
-    private Timer timer;
+    private final Logger logger;
+    private final Timer timer;
     private int leaderId;
     private boolean randomLeader;
-    private Random random;
+    private final Random random;
 
     public RaftClient(RpcClientFactory rpcClientFactory, ClusterConfiguration configuration, LoggerFactory loggerFactory) {
         this.random = new Random(Calendar.getInstance().getTimeInMillis());
@@ -60,39 +60,82 @@ public class RaftClient {
         return result;
     }
 
-    public CompletableFuture<Boolean> addServer(ClusterServer server) {
-        if (server == null) {
-            throw new IllegalArgumentException("server cannot be null");
-        }
-
-        LogEntry[] logEntries = new LogEntry[1];
-        logEntries[0] = new LogEntry(0, server.toBytes(), LogValueType.ClusterServer);
+    public CompletableFuture<ClusterConfiguration> getClusterConfig() {
         RaftRequestMessage request = new RaftRequestMessage();
-        request.setMessageType(RaftMessageType.AddServerRequest);
-        request.setLogEntries(logEntries);
+        request.setMessageType(RaftMessageType.GetClusterRequest);
 
-        CompletableFuture<Boolean> result = new CompletableFuture<Boolean>();
-        this.tryCurrentLeader(request, result, 0, 0);
+        CompletableFuture<ClusterConfiguration> result = new CompletableFuture<>();
+        tryAnyNode(request, result);
         return result;
     }
 
-    public CompletableFuture<Boolean> removeServer(int serverId) {
-        if (serverId < 0) {
-            throw new IllegalArgumentException("serverId must be equal or greater than zero");
-        }
-
-        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
-        buffer.putInt(serverId);
-        LogEntry[] logEntries = new LogEntry[1];
-        logEntries[0] = new LogEntry(0, buffer.array(), LogValueType.ClusterServer);
-        RaftRequestMessage request = new RaftRequestMessage();
-        request.setMessageType(RaftMessageType.RemoveServerRequest);
-        request.setLogEntries(logEntries);
-
-        CompletableFuture<Boolean> result = new CompletableFuture<Boolean>();
-        this.tryCurrentLeader(request, result, 0, 0);
-        return result;
+    private void tryAnyNode(RaftRequestMessage request, CompletableFuture<ClusterConfiguration> future) {
+        tryAnyNode(request, future, configuration.getServers().iterator());
     }
+
+    private void tryAnyNode(RaftRequestMessage request, CompletableFuture<ClusterConfiguration> future, Iterator<ClusterServer> iterator) {
+        if (iterator.hasNext()) {
+            int serverId = iterator.next().getId();
+            RpcClient client = getOrCreateRpcClient(serverId);
+
+            client.send(request).whenCompleteAsync((RaftResponseMessage response, Throwable error) -> {
+                if (error == null) {
+                    logger.debug("response from remote server, leader: %d, accepted: %s", response.getDestination(), String.valueOf(response.isAccepted()));
+                    if (response.isAccepted()) {
+                        LogEntry[] logEntries = response.getLogEntries();
+                        if (logEntries != null &&
+                                logEntries.length == 1 &&
+                                logEntries[0].getValueType() == LogValueType.Configuration) {
+                            configuration = ClusterConfiguration.fromBytes(logEntries[0].getValue());
+                            future.complete(configuration);
+                        } else {
+                            future.complete(null);
+                        }
+
+                    }
+                } else {
+                    logger.info("rpc error, failed to send request to remote server (%s)", error.getMessage());
+                    tryAnyNode(request, future, iterator);
+                }
+            });
+        } else {
+            future.complete(null);
+        }
+    }
+
+//    public CompletableFuture<Boolean> addServer(ClusterServer server) {
+//        if (server == null) {
+//            throw new IllegalArgumentException("server cannot be null");
+//        }
+//
+//        LogEntry[] logEntries = new LogEntry[1];
+//        logEntries[0] = new LogEntry(0, server.toBytes(), LogValueType.ClusterServer);
+//        RaftRequestMessage request = new RaftRequestMessage();
+//        request.setMessageType(RaftMessageType.AddServerRequest);
+//        request.setLogEntries(logEntries);
+//
+//        CompletableFuture<Boolean> result = new CompletableFuture<Boolean>();
+//        this.tryCurrentLeader(request, result, 0, 0);
+//        return result;
+//    }
+//
+//    public CompletableFuture<Boolean> removeServer(int serverId) {
+//        if (serverId < 0) {
+//            throw new IllegalArgumentException("serverId must be equal or greater than zero");
+//        }
+//
+//        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
+//        buffer.putInt(serverId);
+//        LogEntry[] logEntries = new LogEntry[1];
+//        logEntries[0] = new LogEntry(0, buffer.array(), LogValueType.ClusterServer);
+//        RaftRequestMessage request = new RaftRequestMessage();
+//        request.setMessageType(RaftMessageType.RemoveServerRequest);
+//        request.setLogEntries(logEntries);
+//
+//        CompletableFuture<Boolean> result = new CompletableFuture<Boolean>();
+//        this.tryCurrentLeader(request, result, 0, 0);
+//        return result;
+//    }
 
     private void tryCurrentLeader(RaftRequestMessage request, CompletableFuture<Boolean> future, int rpcBackoff, int retry) {
         logger.debug("trying request to %d as current leader", this.leaderId);
@@ -140,13 +183,17 @@ public class RaftClient {
     }
 
     private RpcClient getOrCreateRpcClient() {
+        return getOrCreateRpcClient(this.leaderId);
+    }
+
+    private RpcClient getOrCreateRpcClient(int serverId) {
         synchronized (this.rpcClients) {
-            if (this.rpcClients.containsKey(this.leaderId)) {
-                return this.rpcClients.get(this.leaderId);
+            if (this.rpcClients.containsKey(serverId)) {
+                return this.rpcClients.get(serverId);
             }
 
             RpcClient client = this.rpcClientFactory.createRpcClient(getLeaderEndpoint());
-            this.rpcClients.put(this.leaderId, client);
+            this.rpcClients.put(serverId, client);
             return client;
         }
     }
