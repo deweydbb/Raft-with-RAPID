@@ -231,6 +231,11 @@ public class RaftServer implements RaftMessageHandler {
 
         reconfigure(newConfig);
 
+        if (newConfig.getServers().size() > this.serverSize) {
+            logger.info("Updating server size from %d to %d in onViewChange", this.serverSize, newConfig.getServers().size());
+            this.serverSize = newConfig.getServers().size();
+        }
+
         // if server is leader and new servers have joined, send appendEntries requests to let them know who the leader is
         if (role == ServerRole.Leader && viewChange.getDelta().stream().map(NodeStatusChange::getStatus).anyMatch(x -> x == EdgeStatus.UP)) {
             // hey I am the leader
@@ -314,6 +319,7 @@ public class RaftServer implements RaftMessageHandler {
         response.setSource(this.id);
         response.setDestination(request.getSource());
         response.setConfigId(this.configId);
+        response.setServerSize(this.serverSize);
 
         // After a snapshot the request.getLastLogIndex() may less than logStore.getStartingIndex() but equals to logStore.getStartingIndex() -1
         // In this case, log is Okay if request.getLastLogIndex() == lastSnapshot.getLastLogIndex() && request.getLastLogTerm() == lastSnapshot.getLastTerm()
@@ -383,6 +389,11 @@ public class RaftServer implements RaftMessageHandler {
             }
         }
 
+        if (request.getServerSize() > this.serverSize) {
+            logger.info("Updating server size from %d to %d in append entries", this.serverSize, response.getServerSize());
+            this.serverSize = request.getServerSize();
+        }
+
         this.leader = request.getSource();
         // TODO: make sure this is the right place for stopElectionTimer
         this.logger.info("We are about to call stopElectionTimer");
@@ -408,6 +419,7 @@ public class RaftServer implements RaftMessageHandler {
         response.setDestination(request.getSource());
         response.setTerm(this.state.getTerm());
         response.setConfigId(this.configId);
+        response.setServerSize(this.serverSize);
 
         boolean sameConfigId = this.configId == request.getConfigId();
         logger.info("handleVoteRequest this config id %d", this.configId);
@@ -431,6 +443,7 @@ public class RaftServer implements RaftMessageHandler {
         response.setSource(this.id);
         response.setDestination(this.leader);
         response.setTerm(this.state.getTerm());
+        response.setServerSize(this.serverSize);
 
         long term;
         synchronized (this) {
@@ -531,6 +544,7 @@ public class RaftServer implements RaftMessageHandler {
             request.setLastLogTerm(this.termForLastLog(this.logStore.getFirstAvailableIndex() - 1));
             request.setTerm(this.state.getTerm());
             request.setConfigId(this.configId);
+            request.setServerSize(this.serverSize);
             this.logger.debug("send %s to server %d with term %d, config %d", RaftMessageType.RequestVoteRequest.toString(), peer.getId(), this.state.getTerm(), request.getConfigId());
             peer.SendRequest(request).whenCompleteAsync(this::handlePeerResponse, this.context.getScheduledExecutor());
         }
@@ -588,6 +602,11 @@ public class RaftServer implements RaftMessageHandler {
         if (response.getTerm() < this.state.getTerm()) {
             this.logger.info("Received a peer response from %d that with lower term value %d v.s. %d", response.getSource(), response.getTerm(), this.state.getTerm());
             return;
+        }
+
+        if (response.getServerSize() > this.serverSize) {
+            logger.info("Updating server size from %d to %d in handlePeerResponse", this.serverSize, response.getServerSize());
+            this.serverSize = response.getServerSize();
         }
 
         if (response.getMessageType() == RaftMessageType.RequestVoteResponse) {
@@ -709,6 +728,10 @@ public class RaftServer implements RaftMessageHandler {
 
         RaftParameters parameters = this.context.getRaftParameters();
         int electionTimeout = parameters.getElectionTimeoutLowerBound() + this.random.nextInt(parameters.getElectionTimeoutUpperBound() - parameters.getElectionTimeoutLowerBound() + 1);
+        // TODO REMOVE
+        if (id == 1) {
+            electionTimeout *= 3;
+        }
         // Schedule when election happens based off randomized timeout
         this.logger.info("About to call schedule(this electionTimeoutTask in restartElectionTimer");
         this.scheduledElection = this.context.getScheduledExecutor().schedule(this.electionTimeoutTask, electionTimeout, TimeUnit.MILLISECONDS);
@@ -861,6 +884,7 @@ public class RaftServer implements RaftMessageHandler {
         requestMessage.setCommitIndex(commitIndex);
         requestMessage.setTerm(term);
         requestMessage.setConfigId(configId);
+        requestMessage.setServerSize(this.serverSize);
         return requestMessage;
     }
 
@@ -1175,6 +1199,7 @@ public class RaftServer implements RaftMessageHandler {
         response.setDestination(this.leader);
         response.setTerm(this.state.getTerm());
         response.setConfigId(configId);
+        response.setServerSize(this.serverSize);
 
         if (config != null) {
             LogEntry[] logEntries = new LogEntry[1];
@@ -1199,6 +1224,8 @@ public class RaftServer implements RaftMessageHandler {
         response.setMessageType(RaftMessageType.SyncLogResponse);
         response.setNextIndex(this.logStore.getFirstAvailableIndex());
         response.setAccepted(false);
+        response.setServerSize(this.serverSize);
+
         if (logEntries == null ||
                 logEntries.length != 1 ||
                 logEntries[0].getValueType() != LogValueType.LogPack ||
@@ -1246,6 +1273,7 @@ public class RaftServer implements RaftMessageHandler {
         request.setDestination(this.serverToJoin.getId());
         request.setSource(this.id);
         request.setTerm(this.state.getTerm());
+        request.setServerSize(this.serverSize);
         request.setMessageType(RaftMessageType.SyncLogRequest);
         request.setLastLogIndex(startIndex - 1);
         request.setLogEntries(new LogEntry[]{new LogEntry(this.state.getTerm(), logPack, LogValueType.LogPack)});
@@ -1404,6 +1432,7 @@ public class RaftServer implements RaftMessageHandler {
             RaftRequestMessage request = new RaftRequestMessage();
             request.setMessageType(RaftMessageType.ClientRequest);
             request.setLogEntries(logEntries);
+            request.setServerSize(server.serverSize);
             return this.sendMessageToLeader(request);
         }
 

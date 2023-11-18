@@ -23,6 +23,7 @@ public class RaftMessage {
     private int destination;
     private long term;
     private long configId;
+    private int serverSize;
 
     public long getConfigId() {
         return configId;
@@ -62,5 +63,13 @@ public class RaftMessage {
 
     public void setTerm(long term) {
         this.term = term;
+    }
+
+    public int getServerSize() {
+        return serverSize;
+    }
+
+    public void setServerSize(int serverSize) {
+        this.serverSize = serverSize;
     }
 }

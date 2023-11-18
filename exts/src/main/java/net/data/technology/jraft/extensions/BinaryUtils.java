@@ -27,8 +27,8 @@ import java.util.List;
 
 public class BinaryUtils {
 
-    public static final int RAFT_RESPONSE_HEADER_SIZE = Integer.BYTES * 3 + Long.BYTES * 3 + 2;
-    public static final int RAFT_REQUEST_HEADER_SIZE = Integer.BYTES * 3 + Long.BYTES * 5 + 1;
+    public static final int RAFT_RESPONSE_HEADER_SIZE = Integer.BYTES * 4 + Long.BYTES * 3 + 2;
+    public static final int RAFT_REQUEST_HEADER_SIZE = Integer.BYTES * 4 + Long.BYTES * 5 + 1;
 
     public static byte[] longToBytes(long value) {
         ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
@@ -80,6 +80,7 @@ public class BinaryUtils {
         buffer.put(intToBytes(response.getDestination()));
         buffer.put(longToBytes(response.getTerm()));
         buffer.put(longToBytes(response.getConfigId()));
+        buffer.put(intToBytes(response.getServerSize()));
         buffer.put(longToBytes(response.getNextIndex()));
         buffer.put(booleanToByte(response.isAccepted()));
         buffer.put(intToBytes(logSize));
@@ -104,6 +105,7 @@ public class BinaryUtils {
         response.setDestination(buffer.getInt());
         response.setTerm(buffer.getLong());
         response.setConfigId(buffer.getLong());
+        response.setServerSize(buffer.getInt());
         response.setNextIndex(buffer.getLong());
         response.setAccepted(buffer.get() == 1);
         int logDataSize = buffer.getInt();
@@ -129,6 +131,7 @@ public class BinaryUtils {
         requestBuffer.put(intToBytes(request.getDestination()));
         requestBuffer.put(longToBytes(request.getTerm()));
         requestBuffer.put(longToBytes(request.getConfigId()));
+        requestBuffer.put(intToBytes(request.getServerSize()));
         requestBuffer.put(longToBytes(request.getLastLogTerm()));
         requestBuffer.put(longToBytes(request.getLastLogIndex()));
         requestBuffer.put(longToBytes(request.getCommitIndex()));
@@ -154,6 +157,7 @@ public class BinaryUtils {
         request.setDestination(buffer.getInt());
         request.setTerm(buffer.getLong());
         request.setConfigId(buffer.getLong());
+        request.setServerSize(buffer.getInt());
         request.setLastLogTerm(buffer.getLong());
         request.setLastLogIndex(buffer.getLong());
         request.setCommitIndex(buffer.getLong());
