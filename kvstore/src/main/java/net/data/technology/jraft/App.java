@@ -52,7 +52,6 @@ public class App {
             return;
         }
 
-        FileBasedServerStateManager stateManager = new FileBasedServerStateManager(args[1]);
 //        ClusterConfiguration config = stateManager.loadClusterConfiguration();
 
         if ("client".equalsIgnoreCase(args[0])) {
@@ -71,6 +70,8 @@ public class App {
             System.out.println("Server args are: server directory id serverSize seedIP seedID");
             return;
         }
+
+        FileBasedServerStateManager stateManager = new FileBasedServerStateManager(args[1]);
 
         // Server mode
         int port = 8000 + Integer.parseInt(args[2]);
