@@ -27,13 +27,15 @@ public class RaftContext {
     private final StateMachine stateMachine;
     private RaftParameters raftParameters;
     private ScheduledThreadPoolExecutor scheduledExecutor;
-    private int serverSize;
+    private final int serverSize;
+    private final String seedIp;
+    private final int seedId;
 
-    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, int serverSize) {
-        this(stateManager, stateMachine, raftParameters, rpcListener, logFactory, rpcClientFactory, serverSize, null);
+    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, int serverSize, String seedIp, int seedId) {
+        this(stateManager, stateMachine, raftParameters, rpcListener, logFactory, rpcClientFactory, serverSize, seedIp, seedId, null);
     }
 
-    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, int serverSize, ScheduledThreadPoolExecutor scheduledExecutor) {
+    public RaftContext(ServerStateManager stateManager, StateMachine stateMachine, RaftParameters raftParameters, RpcListener rpcListener, LoggerFactory logFactory, RpcClientFactory rpcClientFactory, int serverSize, String seedIp, int seedId, ScheduledThreadPoolExecutor scheduledExecutor) {
         this.serverStateManager = stateManager;
         this.stateMachine = stateMachine;
         this.raftParameters = raftParameters;
@@ -41,6 +43,8 @@ public class RaftContext {
         this.rpcListener = rpcListener;
         this.loggerFactory = logFactory;
         this.serverSize = serverSize;
+        this.seedIp = seedIp;
+        this.seedId = seedId;
         this.scheduledExecutor = scheduledExecutor;
         if (this.scheduledExecutor == null) {
             this.scheduledExecutor = new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
@@ -77,6 +81,15 @@ public class RaftContext {
     public int getServerSize() {
         return this.serverSize;
         }
+
+    public String getSeedIp() {
+        return seedIp;
+    }
+
+    public int getSeedId() {
+        return seedId;
+    }
+
     public StateMachine getStateMachine() {
         return stateMachine;
     }

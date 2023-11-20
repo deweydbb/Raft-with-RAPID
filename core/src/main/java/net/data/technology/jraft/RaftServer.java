@@ -72,7 +72,7 @@ public class RaftServer implements RaftMessageHandler {
         this.id = context.getServerStateManager().getServerId();
         this.state = context.getServerStateManager().readState();
         this.logStore = context.getServerStateManager().loadLogStore();
-        this.config = context.getServerStateManager().loadClusterConfiguration();
+        this.config = null;// context.getServerStateManager().loadClusterConfiguration();
         this.stateMachine = context.getStateMachine();
         this.serverSize = context.getServerSize();
         this.votesGranted = 0;
@@ -112,21 +112,21 @@ public class RaftServer implements RaftMessageHandler {
          */
 
         //try to see if there is an uncommitted configuration change, since we cannot allow two configuration changes at a time
-        for (long i = Math.max(this.state.getCommitIndex() + 1, this.logStore.getStartIndex()); i < this.logStore.getFirstAvailableIndex(); ++i) {
-            LogEntry logEntry = this.logStore.getLogEntryAt(i);
-            if (logEntry.getValueType() == LogValueType.Configuration) {
-                this.logger.error("SHOULD NOT RUN BECAUSE THERE SHOULD NEVER BE A CONFIG CHANGE COMMITTED TO THE LOG ANYMORE");
-                this.logger.info("detect a configuration change that is not committed yet at index %d", i);
-                this.configChanging = true;
-                break;
-            }
-        }
+//        for (long i = Math.max(this.state.getCommitIndex() + 1, this.logStore.getStartIndex()); i < this.logStore.getFirstAvailableIndex(); ++i) {
+//            LogEntry logEntry = this.logStore.getLogEntryAt(i);
+//            if (logEntry.getValueType() == LogValueType.Configuration) {
+//                this.logger.error("SHOULD NOT RUN BECAUSE THERE SHOULD NEVER BE A CONFIG CHANGE COMMITTED TO THE LOG ANYMORE");
+//                this.logger.info("detect a configuration change that is not committed yet at index %d", i);
+//                this.configChanging = true;
+//                break;
+//            }
+//        }
 
-        for (ClusterServer server : this.config.getServers()) {
-            if (server.getId() != this.id) {
-                this.peers.put(server.getId(), new PeerServer(server, context/*, this::handleHeartbeatTimeout*/));
-            }
-        }
+//        for (ClusterServer server : this.config.getServers()) {
+//            if (server.getId() != this.id) {
+//                this.peers.put(server.getId(), new PeerServer(server, context/*, this::handleHeartbeatTimeout*/));
+//            }
+//        }
 
 //        joinCluster(5);
 //        ClusterConfiguration newConfig = new ClusterConfiguration(cluster.getMemberlist(), this.logStore.getFirstAvailableIndex());
@@ -169,9 +169,9 @@ public class RaftServer implements RaftMessageHandler {
     private void joinCluster(int numRetries) {
         try {
             final HostAndPort listenAddress = HostAndPort.fromString(String.format("127.0.0.1:85%02d", id));
-            final HostAndPort seedAddress = HostAndPort.fromString("127.0.0.1:8501");
+            final HostAndPort seedAddress = HostAndPort.fromString(String.format("%s:85%02d", context.getSeedIp(), context.getSeedId()));
 
-            if (listenAddress.equals(seedAddress)) {
+            if (this.id == context.getSeedId()) {
                 cluster = new Cluster.Builder(listenAddress)
                         .start();
 

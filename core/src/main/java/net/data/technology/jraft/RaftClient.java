@@ -16,7 +16,6 @@
 
 package net.data.technology.jraft;
 
-import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
@@ -209,15 +208,33 @@ public class RaftClient {
     }
 
     private String getLeaderEndpoint() {
+        logger.info("config in get leader endpoint: %s", configuration.getServers());
         for (ClusterServer server : this.configuration.getServers()) {
+            logger.info("Searching for leader %d, found endpoint: %d", leaderId, server.getId());
             if (server.getId() == this.leaderId) {
                 return server.getEndpoint();
             }
         }
 
+        try {
+            // try and re-get the configuration to see if the leader is in the new config
+            configuration = getClusterConfig().get();
+            logger.info("config in get leader endpoint: %s", configuration.getServers());
+            for (ClusterServer server : this.configuration.getServers()) {
+                logger.info("Searching for leader %d, found endpoint: %d", leaderId, server.getId());
+                if (server.getId() == this.leaderId) {
+                    return server.getEndpoint();
+                }
+            }
+        } catch (Exception ignored) {}
+
         logger.info("no endpoint could be found for leader %d, that usually means no leader is elected, retry the first one", this.leaderId);
         this.randomLeader = true;
         this.leaderId = this.configuration.getServers().get(0).getId();
         return this.configuration.getServers().get(0).getEndpoint();
+    }
+
+    public void setConfiguration(ClusterConfiguration configuration) {
+        this.configuration = configuration;
     }
 }

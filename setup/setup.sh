@@ -11,18 +11,16 @@ NUM_SERVERS=3
 for (( i=START; i<=NUM_SERVERS; i++))
 do
   mkdir "server${i}"
-  cp init-cluster.json "./server${i}/cluster.json"
   echo "server.id=${i}" > "./server${i}/config.properties"
   echo "start server${i}"
   cd "./server${i}" || exit
-  gnome-terminal --title="server${i}" -- ../runServer.sh "$i" "$NUM_SERVERS"
+  gnome-terminal --title="server${i}" -- ../runServer.sh "$i" "$NUM_SERVERS" "127.0.0.1" "1"
   cd ..
 done
 
 echo "start client"
 mkdir client
-cp init-cluster.json "./client/cluster.json"
 cp "./server1/config.properties" "./client/config.properties"
 cd "./client" || exit
-gnome-terminal --title="client" -- java -jar ../kvstore.jar client "."
+gnome-terminal --title="client" -- java -jar ../kvstore.jar client "." localhost 1
 cd ..

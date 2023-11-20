@@ -39,7 +39,7 @@ public class App {
             return;
         }
 
-        if (!"server".equalsIgnoreCase(args[0]) && !"client".equalsIgnoreCase(args[0]) && !"dummy".equalsIgnoreCase(args[0])) {
+        if (!"server".equalsIgnoreCase(args[0]) && !"client".equalsIgnoreCase(args[0])) {
             System.out.println("only client and server modes are supported");
             return;
         }
@@ -53,26 +53,34 @@ public class App {
         }
 
         FileBasedServerStateManager stateManager = new FileBasedServerStateManager(args[1]);
-        ClusterConfiguration config = stateManager.loadClusterConfiguration();
+//        ClusterConfiguration config = stateManager.loadClusterConfiguration();
 
         if ("client".equalsIgnoreCase(args[0])) {
-            executeAsClient(config, executor);
+            if (args.length < 4) {
+                System.out.println("Client ars are: client directory seedIP seedID");
+                return;
+            }
+
+            String serverIp = args[2];
+            int serverId = Integer.parseInt(args[3]);
+            executeAsClient(serverIp, serverId, executor);
+            return;
+        }
+
+        if (args.length < 6) {
+            System.out.println("Server args are: server directory id serverSize seedIP seedID");
             return;
         }
 
         // Server mode
-        int port = 8000;
-        if (args.length >= 3) {
-            port = Integer.parseInt(args[2]);
-        }
+        int port = 8000 + Integer.parseInt(args[2]);
+        int serverSize = Integer.parseInt(args[3]);
+        String seedIp = args[4];
+        int seedId = Integer.parseInt(args[5]);
 
-        int serverSize = 3;
-        if (args.length >= 4) {
-            System.out.println("Input args: " + Arrays.toString(args));
-            serverSize = Integer.parseInt(args[3]);
-        }
 
-        URI localEndpoint = new URI(config.getServer(stateManager.getServerId()).getEndpoint());
+        //URI localEndpoint = new URI( config.getServer(stateManager.getServerId()).getEndpoint());
+        URI localEndpoint = new URI(String.format("tcp://localhost:90%02d", stateManager.getServerId()));
         RaftParameters raftParameters = new RaftParameters()
                 .withElectionTimeoutUpper(5000)
                 .withElectionTimeoutLower(3000)
@@ -90,6 +98,8 @@ public class App {
                 new Log4jLoggerFactory(),
                 new RpcTcpClientFactory(executor),
                 serverSize,
+                seedIp,
+                seedId,
                 executor);
         RaftConsensus.run(context);
         System.out.println("Press Enter to exit.");
@@ -97,15 +107,33 @@ public class App {
         mp.stop();
     }
 
-    private static void executeAsClient(ClusterConfiguration configuration, ExecutorService executor) throws Exception {
+    private static void executeAsClient(String serverIp, int seedId, ExecutorService executor) throws Exception {
+        ClusterServer seedServer = new ClusterServer();
+        seedServer.setId(seedId);
+        seedServer.setEndpoint(String.format("tcp://%s:90%02d", serverIp, seedId));
+        ClusterConfiguration configuration = new ClusterConfiguration();
+        configuration.getServers().add(seedServer);
+
         RaftClient client = new RaftClient(new RpcTcpClientFactory(executor), configuration, new Log4jLoggerFactory());
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+        // immediately get config from seed server
+
+        ClusterConfiguration newConfig = null;
+        while (newConfig == null) {
+            newConfig = client.getClusterConfig().get();
+            Thread.sleep(100);
+        }
+
+        configuration = newConfig;
+        client.setConfiguration(configuration);
+
         while (true) {
             System.out.print("Message:");
             String message = reader.readLine();
 
             if (message.startsWith("config")) {
-                ClusterConfiguration newConfig = client.getClusterConfig().get();
+                newConfig = client.getClusterConfig().get();
                 if (newConfig != null) {
                     configuration = newConfig;
                     System.out.println("Config: " + configuration.getServers());

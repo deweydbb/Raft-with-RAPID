@@ -17,7 +17,7 @@
 package net.data.technology.jraft;
 
 import net.data.technology.jraft.extensions.AsyncUtility;
-import org.apache.log4j.LogManager;
+import org.apache.logging.log4j.LogManager;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -39,7 +39,7 @@ public class KVStore implements StateMachine {
 
     private final Map<String, String> map = new ConcurrentHashMap<>();
     private final int port;
-    private final org.apache.log4j.Logger logger;
+    private final org.apache.logging.log4j.Logger logger;
     private AsynchronousServerSocketChannel listener;
     private ExecutorService executorService;
 
@@ -49,6 +49,7 @@ public class KVStore implements StateMachine {
     }
 
     public void start(RaftMessageSender messageSender) {
+        logger.info("Starting kvstore on port " + port);
         int processors = Runtime.getRuntime().availableProcessors();
         executorService = Executors.newFixedThreadPool(processors);
         try {
