@@ -14,7 +14,7 @@ do
   echo "server.id=${i}" > "./server${i}/config.properties"
   echo "start server${i}"
   cd "./server${i}" || exit
-  gnome-terminal --title="server${i}" -- ../runServer.sh "$i" "$NUM_SERVERS" "127.0.0.1" "1"
+  gnome-terminal --title="server${i}" -- ../runServer.sh "$i" "$NUM_SERVERS" "192.168.1.100" "1"
   cd ..
 done
 
@@ -22,5 +22,5 @@ echo "start client"
 mkdir client
 cp "./server1/config.properties" "./client/config.properties"
 cd "./client" || exit
-gnome-terminal --title="client" -- java -jar ../kvstore.jar client "." localhost 1
+gnome-terminal --title="client" -- java -jar ../kvstore.jar client "." "127.0.0.1" 1
 cd ..

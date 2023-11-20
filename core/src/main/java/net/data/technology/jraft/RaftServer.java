@@ -23,6 +23,9 @@ import com.vrg.rapid.NodeStatusChange;
 import com.vrg.rapid.pb.EdgeStatus;
 
 import java.io.IOException;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketException;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -168,7 +171,17 @@ public class RaftServer implements RaftMessageHandler {
 
     private void joinCluster(int numRetries) {
         try {
-            final HostAndPort listenAddress = HostAndPort.fromString(String.format("127.0.0.1:85%02d", id));
+            String localIp = "127.0.0.1";
+            String seedIp = context.getSeedIp();
+            if (!seedIp.equals("127.0.0.1") && !seedIp.equals("localhost")) {
+                DatagramSocket datagramSocket = new DatagramSocket();
+                datagramSocket.connect(InetAddress.getByName("8.8.8.8"), 12345);
+                localIp = datagramSocket.getLocalAddress().getHostAddress();
+            }
+
+            logger.info("Joining cluster with localIp: %s and seedIp: %s", localIp, seedIp);
+
+            final HostAndPort listenAddress = HostAndPort.fromString(String.format("%s:85%02d", localIp, id));
             final HostAndPort seedAddress = HostAndPort.fromString(String.format("%s:85%02d", context.getSeedIp(), context.getSeedId()));
 
             if (this.id == context.getSeedId()) {
