@@ -14,7 +14,7 @@ do
   echo "server.id=${i}" > "./server${i}/config.properties"
   echo "start server${i}"
   cd "./server${i}" || exit
-  gnome-terminal --title="server${i}" -- ../runServer.sh "$i" "$NUM_SERVERS" "192.168.1.100" "1"
+  gnome-terminal --title="server${i}" -- ../runServer.sh "$i" "$NUM_SERVERS" "127.0.0.1" "1"
   cd ..
 done
 

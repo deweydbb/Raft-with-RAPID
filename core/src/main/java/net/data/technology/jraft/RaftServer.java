@@ -539,9 +539,8 @@ public class RaftServer implements RaftMessageHandler {
         this.votesGranted += 1;
         this.votedServers.add(this.id);
 
-        // TODO change to use serverSize
         // Am i the only server in the cluster
-        if (this.votesGranted > (serverSize + 1) / 2) {
+        if (this.votesGranted >= serverSize / 2 + 1) { //TODO check correctness, used to be > (serverSize + 1) / 2
             this.electionCompleted = true;
             this.becomeLeader();
             logger.info("We have just become the leader and are exiting requestVote");
@@ -564,7 +563,6 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private void requestAppendEntries() {
-        // TODO use ServerSize
         //if (this.peers.size() == 0) {
         if (serverSize == 1) {
             this.commit(this.logStore.getFirstAvailableIndex() - 1);
@@ -655,7 +653,7 @@ public class RaftServer implements RaftMessageHandler {
             }
 
             matchedIndexes.sort(indexComparator);
-            this.commit(matchedIndexes.get((serverSize + 1) / 2));
+            this.commit(matchedIndexes.get((serverSize) / 2)); //TODO check correctness!!!! (removed +1) on serversize
 
 //             this.commit(matchedIndexes.get((this.peers.size() + 1) / 2));
             needToCatchup = peer.clearPendingCommit() || response.getNextIndex() < this.logStore.getFirstAvailableIndex();
@@ -701,7 +699,7 @@ public class RaftServer implements RaftMessageHandler {
         }
 
         // got a majority set of granted votes
-        if (this.votesGranted > (serverSize + 1) / 2) {
+        if (this.votesGranted >= serverSize / 2 + 1) { // TODO check correctness
             // if (this.votesGranted > (this.peers.size() + 1) / 2) {
             this.logger.info("Server is elected as leader for term %d", this.state.getTerm());
             this.electionCompleted = true;

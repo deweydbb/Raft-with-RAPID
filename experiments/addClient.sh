@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --help)
       echo "Options:"
-      printf "\t-j or --jar optional. Specifies the location of the jar file to run. Default is kvstore.jar"
+      printf "\t-j or --jar optional. Specifies the location of the jar file to run. Default is kvstore.jar\n"
       printf "\t-d or --directory optional. specifies the working directory of the server. Default is ./server{ID} \n"
       printf "\t--seedIp optional. Specifies the ip address of the server to contact to join to the cluster. Default is 127.0.0.1\n"
       printf "\t--seedId optional Specifies the id (and ports) of the server to contact to join the cluster. Default is 1\n"
