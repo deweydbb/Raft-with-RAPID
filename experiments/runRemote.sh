@@ -10,5 +10,4 @@ do
    echo "Creating server $ID on $HOST"
    gnome-terminal --title="$HOST:server${ID}" -- "/usr/bin/ssh" "davidk@${HOST}" -t "~/Desktop/Distributed/jraft/experiments/addServer.sh --id ${ID} --size $NUM_HOSTS --seedIp ${HOSTS[0]}"
    sleep 1
-   #"cd ~/Desktop/Distributed/jraft/experiments; ./addServer "
 done

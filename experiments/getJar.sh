@@ -1,6 +1,7 @@
 #!/bin/bash
 
 rm kvstore.jar
+git pull origin rapid
 
 cd ..
 mvn package
