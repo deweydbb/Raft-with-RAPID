@@ -144,6 +144,11 @@ public class App {
 
             }
 
+            if (message.startsWith("leader")) {
+                System.out.println("Leader: " + client.getLeaderId());
+                continue;
+            }
+
             if (message.startsWith("put")) {
                 if (message.split(":").length == 3) {
                     String entry = message.substring(message.indexOf(':') + 1);

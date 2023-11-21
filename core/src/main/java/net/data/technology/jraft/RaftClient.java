@@ -68,6 +68,10 @@ public class RaftClient {
         return result;
     }
 
+    public int getLeaderId() {
+        return leaderId;
+    }
+
     private void tryAnyNode(RaftRequestMessage request, CompletableFuture<ClusterConfiguration> future) {
         tryAnyNode(request, future, configuration.getServers().iterator());
     }
@@ -86,6 +90,7 @@ public class RaftClient {
                                 logEntries.length == 1 &&
                                 logEntries[0].getValueType() == LogValueType.Configuration) {
                             configuration = ClusterConfiguration.fromBytes(logEntries[0].getValue());
+                            leaderId = response.getDestination();
                             future.complete(configuration);
                         } else {
                             future.complete(null);
