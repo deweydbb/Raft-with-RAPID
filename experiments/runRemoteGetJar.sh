@@ -1,21 +1,21 @@
 #!/bin/bash
 
-NEW_TERMINAL=false
-
 while [[ $# -gt 0 ]]; do
   case $1 in
     --host)
-      HOST="$2"
+      HOSTS=("$2")
       shift # past argument
       shift # past value
       ;;
-    -t|--terminal)
-      NEW_TERMINAL=true
-      shift # past argument
-    ;;
+    --file)
+      FILE="$2"
+      shift
+      shift
+      ;;
     --help)
       echo "Options:"
-      printf "--host Required. Specifies the remote host to run getJar on"
+      printf "--host Optional. Specifies the remote host to run getJar on\n"
+      printf "--file Optional. Specifies a file containing a list on hosts, one on each line to run getJar on\n"
       exit
       ;;
     -*|--*)
@@ -25,16 +25,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [ -z ${HOST+x} ]; then
-  echo "--host is required"
+if [ -z ${HOSTS+x} ] && [ -z ${FILE+x} ]; then
+  echo "--host or --file is required"
   exit
 fi
 
-if [ "$NEW_TERMINAL" = true ]; then
-  gnome-terminal --title="$HOST:getJar" -- "/usr/bin/ssh" "davidk@${HOST}" -t "~/Desktop/Distributed/jraft/experiments/getJar.sh"
-else
-  ssh "davidk@$HOST" -t "~/Desktop/Distributed/jraft/experiments/getJar.sh"
+if [[ -n ${FILE+x} ]]; then
+  readarray -t HOSTS < "$FILE"
 fi
+
+for HOST in "${HOSTS[@]}"
+do
+  echo "HOST: $HOST"
+   ssh "davidk@$HOST" -t "export JAVA_HOME=/usr/lib/jvm/default-java; ~/Desktop/Distributed/jraft/experiments/getJar.sh"
+done
+
 
 
 
