@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")" || exit
 
 rm kvstore.jar
 git pull origin rapid

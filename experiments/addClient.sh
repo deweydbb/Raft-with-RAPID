@@ -1,5 +1,5 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 JAR="kvstore.jar"
 SEED_IP="127.0.0.1"
