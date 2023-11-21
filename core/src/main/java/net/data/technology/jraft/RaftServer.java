@@ -187,7 +187,6 @@ public class RaftServer implements RaftMessageHandler {
             if (this.id == context.getSeedId()) {
                 cluster = new Cluster.Builder(listenAddress)
                         .start();
-
             } else {
                 // doesn't return until been accepted into cluster
                 cluster = new Cluster.Builder(listenAddress)
@@ -540,7 +539,7 @@ public class RaftServer implements RaftMessageHandler {
         this.votedServers.add(this.id);
 
         // Am i the only server in the cluster
-        if (this.votesGranted >= serverSize / 2 + 1) { //TODO check correctness, used to be > (serverSize + 1) / 2
+        if (this.votesGranted >= serverSize / 2 + 1) {
             this.electionCompleted = true;
             this.becomeLeader();
             logger.info("We have just become the leader and are exiting requestVote");
@@ -699,7 +698,7 @@ public class RaftServer implements RaftMessageHandler {
         }
 
         // got a majority set of granted votes
-        if (this.votesGranted >= serverSize / 2 + 1) { // TODO check correctness
+        if (this.votesGranted >= serverSize / 2 + 1) {
             // if (this.votesGranted > (this.peers.size() + 1) / 2) {
             this.logger.info("Server is elected as leader for term %d", this.state.getTerm());
             this.electionCompleted = true;
