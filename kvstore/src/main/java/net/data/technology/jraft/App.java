@@ -105,7 +105,7 @@ public class App {
         RaftConsensus.run(context);
         System.out.println("Press Enter to exit.");
         System.in.read();
-        mp.stop();
+        //mp.stop();
     }
 
     private static void executeAsClient(String serverIp, int seedId, ExecutorService executor) throws Exception {
