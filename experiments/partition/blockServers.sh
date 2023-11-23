@@ -3,7 +3,6 @@ cd "$(dirname "$0")" || exit
 
 ./deleteAllBlocked.sh
 
-
 while [[ $# -gt 0 ]]; do
   case $1 in
     --file)
@@ -23,16 +22,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n ${FILE+x} ]]; then
-  readarray -t HOSTS < "$FILE"
-else
+if [ -z ${FILE+x} ]; then
   echo "--file is required"
   exit
 fi
 
-# Loop through the array
-for INDEX in "${!HOSTS[@]}"
-do
-    HOST="${HOSTS[$INDEX]}"
-   sudo iptables -I INPUT -s "$HOST" -j DROP
+# get private ip address of the system
+IP=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1')
+
+# find line in file that starts with systems ip address and get rest of the remaining line
+BLOCK_IPS=$(cat "$FILE" | grep "^$IP" | grep -Eo "\s.*$")
+
+for HOST in $BLOCK_IPS; do
+    echo "blocking $HOST"
+    sudo iptables -I INPUT -s "$HOST" -j DROP
 done
