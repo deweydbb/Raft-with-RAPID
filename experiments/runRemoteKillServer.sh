@@ -33,6 +33,6 @@ do
    ID=$((INDEX + 1))
    HOST="${HOSTS[$INDEX]}"
    echo "Creating server $ID on $HOST"
-   ssh -f "ec2-user@${HOST}" "sh -c 'nohup /home/ec2-user/Projects/jraft/experiments/addServer.sh --id ${ID} --size $NUM_HOSTS --seedIp ${HOSTS[0]} > stdout-log.log 2>&1 &'"
+   ssh -f "ec2-user@${HOST}" "/home/ec2-user/Projects/jraft/experiments/killServer.sh"
    sleep 1
 done
