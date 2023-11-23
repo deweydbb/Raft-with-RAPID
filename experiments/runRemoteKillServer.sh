@@ -32,7 +32,7 @@ for INDEX in "${!HOSTS[@]}"
 do
    ID=$((INDEX + 1))
    HOST="${HOSTS[$INDEX]}"
-   echo "Creating server $ID on $HOST"
-   ssh -f "ec2-user@${HOST}" "/home/ec2-user/Projects/jraft/experiments/killServer.sh"
+   echo "Deleting java on $HOST"
+   ssh -f "ec2-user@${HOST}" "killall -9 java"
    sleep 1
 done

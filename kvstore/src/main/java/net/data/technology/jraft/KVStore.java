@@ -57,6 +57,7 @@ public class KVStore implements StateMachine {
             this.listener = AsynchronousServerSocketChannel.open(channelGroup);
             this.listener.setOption(StandardSocketOptions.SO_REUSEADDR, true);
             this.listener.bind(new InetSocketAddress(this.port));
+            logger.info("abbout to call acceptrequests, listenr is " + listener);
             this.acceptRequests();
         } catch (IOException exception) {
             logger.error("failed to start the listener due to io error", exception);
@@ -64,6 +65,7 @@ public class KVStore implements StateMachine {
     }
 
     public void stop() {
+        logger.info("About to call stop in kvstore");
         if (this.listener != null) {
             try {
                 this.listener.close();
