@@ -37,9 +37,5 @@ fi
 for HOST in "${HOSTS[@]}"
 do
   echo "HOST: $HOST"
-   ssh "davidk@$HOST" -t "export JAVA_HOME=/usr/lib/jvm/default-java; ~/Desktop/Distributed/jraft/experiments/getJar.sh"
+   ssh "ec2-user@$HOST" -t "/home/ec2-user/Projects/jraft/experiments/getJar.sh"
 done
-
-
-
-
