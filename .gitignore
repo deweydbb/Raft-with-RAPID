@@ -7,5 +7,7 @@
 .settings/
 .idea/
 setup/*/
-experiments/*/
+experiments/server*/
+experiments/client*/
 experiments/*.txt
+experiments/*/*.txt
