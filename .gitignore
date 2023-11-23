@@ -11,3 +11,4 @@ experiments/server*/
 experiments/client*/
 experiments/*.txt
 experiments/*/*.txt
+*.log

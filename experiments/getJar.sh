@@ -2,6 +2,7 @@
 cd "$(dirname "$0")" || exit
 
 rm kvstore.jar
+./cleanup
 git pull origin rapid
 
 cd ..
