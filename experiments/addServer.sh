@@ -44,7 +44,7 @@ else
 fi
 
 cp "$JAR" "$DIR/kvstore.jar"
-cp init-cluster.json "./servers${ID}/cluster.json"
+cp init-cluster.json "./server${ID}/cluster.json"
 echo "server.id=${ID}" > "$DIR/config.properties"
 
 cd "$DIR" || exit
