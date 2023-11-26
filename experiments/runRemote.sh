@@ -1,5 +1,7 @@
 #!/bin/bash
 
+CLUSTER_FILE="init-cluster.json"
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     --file)
@@ -7,9 +9,15 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    --cluster)
+      CLUSTER_FILE="$2"
+      shift
+      shift
+      ;;
     --help)
       echo "Options:"
       printf "--file Required. Specifies a file containing a list on hosts, one on each line to run addServer on\n"
+      printf "--cluster Optional. Specifies the cluster json file to use when running the servers\n"
       exit
       ;;
     -*|--*)
@@ -33,6 +41,7 @@ do
    ID=$((INDEX + 1))
    HOST="${HOSTS[$INDEX]}"
    echo "Creating server $ID on $HOST"
-   ssh -f "ec2-user@${HOST}" "sh -c 'cd /home/ec2-user/Projects/baseImplementation/experiments/; nohup ./addServer.sh --id ${ID} --size $NUM_HOSTS --seedIp ${HOSTS[0]} > stdout-log.log 2>&1 &'"
+   scp "$CLUSTER_FILE" "ec2-user@$HOST:/home/ec2-user/Projects/baseImplementation/experiments/init-cluster.json"
+   ssh -f "ec2-user@${HOST}" "sh -c 'cd /home/ec2-user/Projects/baseImplementation/experiments/; nohup ./addServer.sh --id ${ID} > stdout-log.log 2>&1 &'"
    sleep 1
 done

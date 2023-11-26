@@ -130,13 +130,11 @@ public class KVStore implements StateMachine {
     }
 
     private void readRequest(AsynchronousSocketChannel connection){
-        System.out.println("Running read request");
         ByteBuffer buffer = ByteBuffer.allocate(4);
         try{
             AsyncUtility.readFromChannel(connection, buffer, null, handlerFrom((Integer bytesRead, Object ctx) -> {
                 if(bytesRead < 4){
                     logger.info("failed to read the request header from client socket");
-                    System.out.println("failed to read the request header from client socket");
                     closeSocket(connection);
                 }else{
                     try{
