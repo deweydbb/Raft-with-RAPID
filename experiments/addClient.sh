@@ -4,6 +4,7 @@ cd "$(dirname "$0")" || exit
 JAR="kvstore.jar"
 SEED_IP="127.0.0.1"
 SEED_ID=1
+DIR="./client"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -42,7 +43,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-DIR="./client"
 
 if [ -d "$DIR" ]; then
   cd "$DIR" || exit
@@ -53,7 +53,7 @@ else
 fi
 
 cp "$JAR" "$DIR/kvstore.jar"
-echo "{\"logIndex\":0,\"lastLogIndex\":0,\"servers\":[{\"id\": $SEED_ID,\"endpoint\": \"tcp://$SEED_IP:900$SEED_ID\"}]}" > "./server${ID}/cluster.json"
+echo "{\"logIndex\":0,\"lastLogIndex\":0,\"servers\":[{\"id\": $SEED_ID,\"endpoint\": \"tcp://$SEED_IP:900$SEED_ID\"}]}" > "$DIR/cluster.json"
 
 cd "$DIR" || exit
 java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID"

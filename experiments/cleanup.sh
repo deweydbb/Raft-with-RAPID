@@ -6,4 +6,6 @@ do
   rm -rf "$dir"
 done
 
+rm *.log
+
 rm -rf "client/"
