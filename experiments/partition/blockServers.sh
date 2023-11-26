@@ -30,10 +30,28 @@ fi
 # get private ip address of the system
 IP=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1')
 
-# find line in file that starts with systems ip address and get rest of the remaining line
-BLOCK_IPS=$(cat "$FILE" | grep "^$IP" | grep -Eo "\s.*$")
+# ignore commented lines
+LINES=$(cat "$FILE" | grep -v "^#")
 
-for HOST in $BLOCK_IPS; do
-    echo "blocking $HOST"
-    sudo iptables -I INPUT -s "$HOST" -j DROP
+# convert machine lines 
+MACHINES=($(echo "$LINES" | grep -Eo "^[0-9\.]+" | tr "\n" " "))
+
+# find our id
+for INDEX in "${!MACHINES[@]}"; do 
+    VAL="${MACHINES[$INDEX]}"
+    if test "$IP" = "$VAL"; then
+        ID=$INDEX
+    fi
+done
+
+# get array of whether to a given id for this specific server
+BLOCK_ARR=($(echo "$LINES" | grep "$IP" | grep -Eo "(\s[0-9])*" | grep -Eo "[0-9]" | tr "\n" " "))
+
+for INDEX in "${!BLOCK_ARR[@]}"; do 
+    SHOULD_BLOCK="${BLOCK_ARR[$INDEX]}"
+    if test "$SHOULD_BLOCK" = "1"; then
+        HOST_TO_BLOCK="${MACHINES[$INDEX]}"
+        echo "blocking $HOST_TO_BLOCK"
+        sudo iptables -I INPUT -s "$HOST_TO_BLOCK" -j DROP
+    fi
 done
