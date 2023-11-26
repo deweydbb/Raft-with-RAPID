@@ -10,5 +10,6 @@ setup/*/
 experiments/server*/
 experiments/client*/
 experiments/*.txt
+experiments/*.json
 experiments/*/*.txt
 *.log
