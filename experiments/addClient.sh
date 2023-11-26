@@ -53,7 +53,7 @@ else
 fi
 
 cp "$JAR" "$DIR/kvstore.jar"
-#echo "server.id=${ID}" > "$DIR/config.properties"
+echo "{\"logIndex\":0,\"lastLogIndex\":0,\"servers\":[{\"id\": $SEED_ID,\"endpoint\": \"tcp://$SEED_IP:900$SEED_ID\"}]}" > "./server${ID}/cluster.json"
 
 cd "$DIR" || exit
 java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID"
