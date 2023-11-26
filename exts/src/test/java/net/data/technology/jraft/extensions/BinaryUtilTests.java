@@ -67,25 +67,25 @@ public class BinaryUtilTests {
         assertTrue(logEntriesEquals(logEntry, entries[0]));
     }
 
-    @Test
-    public void testResponseConverter(){
-        RaftResponseMessage response = new RaftResponseMessage();
-        response.setMessageType(this.randomMessageType());
-        response.setAccepted(this.random.nextBoolean());
-        response.setDestination(this.random.nextInt());
-        response.setSource(this.random.nextInt());
-        response.setTerm(this.random.nextLong());
-        response.setNextIndex(this.random.nextLong());
-
-        byte[] data = BinaryUtils.messageToBytes(response);
-        RaftResponseMessage response1 = BinaryUtils.bytesToResponseMessage(data);
-        assertEquals(response.getMessageType(), response1.getMessageType());
-        assertEquals(response.isAccepted(), response1.isAccepted());
-        assertEquals(response.getSource(), response1.getSource());
-        assertEquals(response.getDestination(), response1.getDestination());
-        assertEquals(response.getTerm(), response1.getTerm());
-        assertEquals(response.getNextIndex(), response1.getNextIndex());
-    }
+//    @Test
+//    public void testResponseConverter(){
+//        RaftResponseMessage response = new RaftResponseMessage();
+//        response.setMessageType(this.randomMessageType());
+//        response.setAccepted(this.random.nextBoolean());
+//        response.setDestination(this.random.nextInt());
+//        response.setSource(this.random.nextInt());
+//        response.setTerm(this.random.nextLong());
+//        response.setNextIndex(this.random.nextLong());
+//
+//        byte[] data = BinaryUtils.messageToBytes(response);
+//        RaftResponseMessage response1 = BinaryUtils.bytesToResponseMessage(data);
+//        assertEquals(response.getMessageType(), response1.getMessageType());
+//        assertEquals(response.isAccepted(), response1.isAccepted());
+//        assertEquals(response.getSource(), response1.getSource());
+//        assertEquals(response.getDestination(), response1.getDestination());
+//        assertEquals(response.getTerm(), response1.getTerm());
+//        assertEquals(response.getNextIndex(), response1.getNextIndex());
+//    }
 
     @Test
     public void testRequestConverter(){

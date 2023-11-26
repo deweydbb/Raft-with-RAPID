@@ -33,7 +33,7 @@ import net.data.technology.jraft.RaftResponseMessage;
 
 public class BinaryUtils {
 
-    public static final int RAFT_RESPONSE_HEADER_SIZE = Integer.BYTES * 2 + Long.BYTES * 2 + 2;
+    public static final int RAFT_RESPONSE_HEADER_SIZE = Integer.BYTES * 3 + Long.BYTES * 2 + 2;
     public static final int RAFT_REQUEST_HEADER_SIZE = Integer.BYTES * 3 + Long.BYTES * 4 + 1;
 
     public static byte[] longToBytes(long value){
@@ -66,19 +66,38 @@ public class BinaryUtils {
         return value != 0;
     }
 
-    public static byte[] messageToBytes(RaftResponseMessage response){
-        ByteBuffer buffer = ByteBuffer.allocate(RAFT_RESPONSE_HEADER_SIZE);
+    public static byte[] messageToBytes(RaftResponseMessage response) {
+        LogEntry[] logEntries = response.getLogEntries();
+        int logSize = 0;
+        List<byte[]> buffersForLogs = null;
+        if (logEntries != null && logEntries.length > 0) {
+            buffersForLogs = new ArrayList<byte[]>(logEntries.length);
+            for (LogEntry logEntry : logEntries) {
+                byte[] logData = logEntryToBytes(logEntry);
+                logSize += logData.length;
+                buffersForLogs.add(logData);
+            }
+        }
+
+        ByteBuffer buffer = ByteBuffer.allocate(RAFT_RESPONSE_HEADER_SIZE + logSize);
         buffer.put(response.getMessageType().toByte());
         buffer.put(intToBytes(response.getSource()));
         buffer.put(intToBytes(response.getDestination()));
         buffer.put(longToBytes(response.getTerm()));
         buffer.put(longToBytes(response.getNextIndex()));
         buffer.put(booleanToByte(response.isAccepted()));
+        buffer.put(intToBytes(logSize));
+        if (buffersForLogs != null) {
+            for (byte[] logData : buffersForLogs) {
+                buffer.put(logData);
+            }
+        }
+
         return buffer.array();
     }
 
-    public static RaftResponseMessage bytesToResponseMessage(byte[] data){
-        if(data == null || data.length != RAFT_RESPONSE_HEADER_SIZE){
+    public static Pair<RaftResponseMessage, Integer> bytesToResponseMessage(byte[] data) {
+        if (data == null || data.length != RAFT_RESPONSE_HEADER_SIZE) {
             throw new IllegalArgumentException(String.format("data must have %d bytes for a raft response message", RAFT_RESPONSE_HEADER_SIZE));
         }
 
@@ -90,7 +109,8 @@ public class BinaryUtils {
         response.setTerm(buffer.getLong());
         response.setNextIndex(buffer.getLong());
         response.setAccepted(buffer.get() == 1);
-        return response;
+        int logDataSize = buffer.getInt();
+        return new Pair<>(response, logDataSize);
     }
 
     public static byte[] messageToBytes(RaftRequestMessage request){

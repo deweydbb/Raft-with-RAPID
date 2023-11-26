@@ -18,12 +18,7 @@
 package net.data.technology.jraft;
 
 import java.nio.ByteBuffer;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 public class RaftClient {
@@ -65,6 +60,57 @@ public class RaftClient {
         this.tryCurrentLeader(request, result, 0, 0);
         return result;
     }
+
+    public CompletableFuture<ClusterConfiguration> getClusterConfig() {
+        RaftRequestMessage request = new RaftRequestMessage();
+        request.setMessageType(RaftMessageType.GetClusterRequest);
+
+        CompletableFuture<ClusterConfiguration> result = new CompletableFuture<>();
+        tryAnyNode(request, result);
+        return result;
+    }
+
+    public int getLeaderId() {
+        return leaderId;
+    }
+
+    private void tryAnyNode(RaftRequestMessage request, CompletableFuture<ClusterConfiguration> future) {
+        tryAnyNode(request, future, configuration.getServers().iterator());
+    }
+
+    private void tryAnyNode(RaftRequestMessage request, CompletableFuture<ClusterConfiguration> future, Iterator<ClusterServer> iterator) {
+        if (iterator.hasNext()) {
+            int serverId = iterator.next().getId();
+            RpcClient client = getOrCreateRpcClient(serverId);
+
+            client.send(request).whenCompleteAsync((RaftResponseMessage response, Throwable error) -> {
+                if (error == null) {
+                    logger.debug("response from remote server, leader: %d, accepted: %s", response.getDestination(), String.valueOf(response.isAccepted()));
+                    if (response.isAccepted()) {
+                        LogEntry[] logEntries = response.getLogEntries();
+                        if (logEntries != null &&
+                                logEntries.length == 1 &&
+                                logEntries[0].getValueType() == LogValueType.Configuration) {
+                            configuration = ClusterConfiguration.fromBytes(logEntries[0].getValue());
+                            leaderId = response.getDestination();
+                            future.complete(configuration);
+                        } else {
+                            future.complete(null);
+                        }
+
+                    } else {
+                        tryAnyNode(request, future, iterator);
+                    }
+                } else {
+                    logger.info("rpc error, failed to send request to remote server (%s)", error.getMessage());
+                    tryAnyNode(request, future, iterator);
+                }
+            });
+        } else {
+            future.complete(null);
+        }
+    }
+
 
     public CompletableFuture<Boolean> addServer(ClusterServer server){
         if(server == null){
@@ -144,14 +190,18 @@ public class RaftClient {
         });
     }
 
-    private RpcClient getOrCreateRpcClient(){
-        synchronized(this.rpcClients){
-            if(this.rpcClients.containsKey(this.leaderId)){
-                return this.rpcClients.get(this.leaderId);
+    private RpcClient getOrCreateRpcClient() {
+        return getOrCreateRpcClient(this.leaderId);
+    }
+
+    private RpcClient getOrCreateRpcClient(int serverId) {
+        synchronized (this.rpcClients) {
+            if (this.rpcClients.containsKey(serverId)) {
+                return this.rpcClients.get(serverId);
             }
 
             RpcClient client = this.rpcClientFactory.createRpcClient(getLeaderEndpoint());
-            this.rpcClients.put(this.leaderId, client);
+            this.rpcClients.put(serverId, client);
             return client;
         }
     }

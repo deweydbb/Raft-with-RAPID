@@ -21,6 +21,7 @@ public class RaftResponseMessage extends RaftMessage {
 
     private long nextIndex;
     private boolean accepted;
+    private LogEntry[] logEntries;
 
     public long getNextIndex() {
         return nextIndex;
@@ -36,5 +37,13 @@ public class RaftResponseMessage extends RaftMessage {
 
     public void setAccepted(boolean accepted) {
         this.accepted = accepted;
+    }
+
+    public LogEntry[] getLogEntries() {
+        return logEntries;
+    }
+
+    public void setLogEntries(LogEntry[] logEntries) {
+        this.logEntries = logEntries;
     }
 }
