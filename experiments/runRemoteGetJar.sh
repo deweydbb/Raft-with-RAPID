@@ -37,5 +37,5 @@ fi
 for HOST in "${HOSTS[@]}"
 do
   echo "HOST: $HOST"
-   ssh "ec2-user@$HOST" -t "/home/ec2-user/Projects/jraft/experiments/getJar.sh"
+  ssh "ec2-user@$HOST" -t "/home/ec2-user/Projects/baseImplementation/experiments/getJar.sh"
 done
