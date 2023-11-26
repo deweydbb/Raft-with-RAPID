@@ -51,7 +51,7 @@ for INDEX in "${!BLOCK_ARR[@]}"; do
     SHOULD_BLOCK="${BLOCK_ARR[$INDEX]}"
     if test "$SHOULD_BLOCK" = "1"; then
         # do not block ourselves
-        if [ "$INDEX" != "$ID"]; then
+        if [ "$INDEX" != "$ID" ]; then
             HOST_TO_BLOCK="${MACHINES[$INDEX]}"
             echo "blocking $HOST_TO_BLOCK"
             sudo iptables -I INPUT -s "$HOST_TO_BLOCK" -j DROP
