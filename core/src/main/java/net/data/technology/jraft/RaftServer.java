@@ -17,10 +17,15 @@
 package net.data.technology.jraft;
 
 import com.google.common.net.HostAndPort;
-import com.vrg.rapid.Cluster;
-import com.vrg.rapid.ClusterStatusChange;
-import com.vrg.rapid.NodeStatusChange;
+import com.google.protobuf.ByteString;
+import com.vrg.rapid.*;
+import com.vrg.rapid.messaging.IMessagingClient;
+import com.vrg.rapid.messaging.IMessagingServer;
+import com.vrg.rapid.messaging.impl.GrpcClient;
+import com.vrg.rapid.messaging.impl.GrpcServer;
+import com.vrg.rapid.monitoring.IEdgeFailureDetectorFactory;
 import com.vrg.rapid.pb.EdgeStatus;
+import com.vrg.rapid.pb.Endpoint;
 
 import java.io.IOException;
 import java.net.DatagramSocket;
@@ -144,7 +149,6 @@ public class RaftServer implements RaftMessageHandler {
 //        if (leader == -1) {
 //            // we get append entries, set leader
 //            this.restartElectionTimer();
-//            // TODO: Not using locks, but if something goes wrong relates to this, we might need to use locks
 //            if (leader != -1) {
 //                stopElectionTimer();
 //            }
@@ -183,14 +187,33 @@ public class RaftServer implements RaftMessageHandler {
             logger.info("Joining cluster with localIp: %s and seedIp: %s", localIp, seedIp);
 
             final HostAndPort listenAddress = HostAndPort.fromString(String.format("%s:85%02d", localIp, id));
+            final Endpoint listenEndpoint = Endpoint.newBuilder()
+                    .setHostname(ByteString.copyFromUtf8(localIp))
+                    .setPort(8500 + id)
+                    .build();
             final HostAndPort seedAddress = HostAndPort.fromString(String.format("%s:85%02d", context.getSeedIp(), context.getSeedId()));
+
+            Settings settings = new Settings();
+            settings.setGrpcProbeTimeoutMs(1000);  // default is 1000
+            settings.setFailureDetectorIntervalInMs(1000); // default is 1000
+
+            SharedResources sharedResources = new SharedResources(listenEndpoint);
+            IMessagingClient messagingClient = new GrpcClient(listenEndpoint, sharedResources, settings);
+            IMessagingServer messagingServer = new GrpcServer(listenEndpoint, sharedResources, settings.getUseInProcessTransport());
+            IEdgeFailureDetectorFactory factory = new PingPongFailureDetector.Factory(listenEndpoint, messagingClient);
 
             if (this.id == context.getSeedId()) {
                 cluster = new Cluster.Builder(listenAddress)
+                        .useSettings(settings)
+                        .setMessagingClientAndServer(messagingClient, messagingServer)
+                        .setEdgeFailureDetectorFactory(factory)
                         .start();
             } else {
                 // doesn't return until been accepted into cluster
                 cluster = new Cluster.Builder(listenAddress)
+                        .useSettings(settings)
+                        .setMessagingClientAndServer(messagingClient, messagingServer)
+                        .setEdgeFailureDetectorFactory(factory)
                         .join(seedAddress);
             }
             cluster.registerSubscription(com.vrg.rapid.ClusterEvents.VIEW_CHANGE_PROPOSAL,
@@ -738,11 +761,8 @@ public class RaftServer implements RaftMessageHandler {
         }
 
         RaftParameters parameters = this.context.getRaftParameters();
-        int electionTimeout = parameters.getElectionTimeoutLowerBound() + this.random.nextInt(parameters.getElectionTimeoutUpperBound() - parameters.getElectionTimeoutLowerBound() + 1);
-        // TODO REMOVE
-        if (id == 1) {
-            electionTimeout *= 3;
-        }
+        //int electionTimeout = parameters.getElectionTimeoutLowerBound() + this.random.nextInt(parameters.getElectionTimeoutUpperBound() - parameters.getElectionTimeoutLowerBound() + 1);
+        int electionTimeout = 1 + this.random.nextInt(1000);
         // Schedule when election happens based off randomized timeout
         this.logger.info("About to call schedule(this electionTimeoutTask in restartElectionTimer");
         this.scheduledElection = this.context.getScheduledExecutor().schedule(this.electionTimeoutTask, electionTimeout, TimeUnit.MILLISECONDS);
