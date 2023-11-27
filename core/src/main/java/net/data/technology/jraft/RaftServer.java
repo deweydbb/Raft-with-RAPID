@@ -17,6 +17,7 @@
 package net.data.technology.jraft;
 
 import java.nio.ByteBuffer;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Comparator;
@@ -585,6 +586,8 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private void becomeLeader() {
+        Instant instant = Instant.now();
+        logger.info("I have become leader at timestamp: %d%d", instant.getEpochSecond(), instant.getNano())
         this.stopElectionTimer();
         this.role = ServerRole.Leader;
         this.leader = this.id;

@@ -28,6 +28,11 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past value
       ;;
+    --command)
+      CMD="$2"
+      shift
+      shift
+      ;;
     --help)
       echo "Options:"
       printf "\t-j or --jar optional. Specifies the location of the jar file to run. Default is kvstore.jar\n"
@@ -55,7 +60,14 @@ fi
 cp "$JAR" "$DIR/kvstore.jar"
 echo "{\"logIndex\":0,\"lastLogIndex\":0,\"servers\":[{\"id\": $SEED_ID,\"endpoint\": \"tcp://$SEED_IP:900$SEED_ID\"}]}" > "$DIR/cluster.json"
 echo "server.id=${SEED_ID}" > "$DIR/config.properties"
-
+if [[ -n ${CMD+x} ]]; then
+    cp "$CMD" "$DIR/cmd.txt"
+fi
 
 cd "$DIR" || exit
-java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID"
+
+if [[ -n ${CMD+x} ]]; then
+  java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID" < cmd.txt
+else
+  java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID"
+fi

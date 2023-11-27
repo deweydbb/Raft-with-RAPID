@@ -24,10 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.StringTokenizer;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
@@ -35,6 +32,7 @@ import net.data.technology.jraft.extensions.FileBasedServerStateManager;
 import net.data.technology.jraft.extensions.Log4jLoggerFactory;
 import net.data.technology.jraft.extensions.RpcTcpClientFactory;
 import net.data.technology.jraft.extensions.RpcTcpListener;
+import org.h2.expression.function.SysInfoFunction;
 
 public class App
 {
@@ -97,11 +95,11 @@ public class App
 
     private static void executeAsClient(ClusterConfiguration configuration, ExecutorService executor) throws Exception {
         RaftClient client = new RaftClient(new RpcTcpClientFactory(executor), configuration, new Log4jLoggerFactory());
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        while(true){
+        Scanner in = new Scanner(System.in);
+        System.out.print("Message:");
+        while(in.hasNext()){
             try {
-                System.out.print("Message:");
-                String message = reader.readLine();
+                String message = in.nextLine();
                 if (message.startsWith("addsrv:")) {
                     String[] args = message.substring(7).split(":");
 
@@ -178,8 +176,12 @@ public class App
                 }
             } catch (Exception e) {
                 System.out.println("Error: " + e);
+            } finally {
+                System.out.print("Message:");
             }
         }
+
+        System.exit(0);
     }
 
     private static String get(ClusterServer server, String key) {
