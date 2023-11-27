@@ -1,5 +1,7 @@
 #!/bin/bash
 
+BASE_PATH="/home/ec2-user/Projects/baseImplementation/experiments"
+LOG_FILE_NAME="raft-debugging.log"
 
 NUM_TESTS=5
 HOST_FILE="../hosts3.txt"
@@ -45,12 +47,12 @@ for TEST_NUM in $(seq 1 $NUM_TESTS); do
     SEED_IP="${HOSTS[$SEED_INDEX]}"
 
 
-    RAW_OUTPUT=$(../addClient.sh --seedIp "$SEED_IP" --seedId "$SEED_ID" --command ./DetectFailedLeaderTest/cmd.txt)
+    RAW_OUTPUT=$(../addClient.sh --seedIp "$SEED_IP" --seedId "$SEED_ID" --command ./DetectFailedLeaderTest/cmd.txt 2> /dev/null)
     NEW_LEADER_ID=$(echo "$RAW_OUTPUT" | grep "Leader" | grep -Eo "[-]?[0-9]+")
     # loop until new leader is elected
     while [ "$NEW_LEADER_ID" = "-1" ] || [ "$NEW_LEADER_ID" = "$LEADER_ID" ]; do
         sleep .25
-        RAW_OUTPUT=$(../addClient.sh --seedIp "$SEED_IP" --seedId "$SEED_ID" --command ./DetectFailedLeaderTest/cmd.txt)
+        RAW_OUTPUT=$(../addClient.sh --seedIp "$SEED_IP" --seedId "$SEED_ID" --command ./DetectFailedLeaderTest/cmd.txt 2> /dev/null)
         NEW_LEADER_ID=$(echo "$RAW_OUTPUT" | grep "Leader" | grep -Eo "[-]?[0-9]+")
     done 
 
@@ -58,12 +60,12 @@ for TEST_NUM in $(seq 1 $NUM_TESTS); do
     NEW_LEADER_INDEX=$(($NEW_LEADER_ID-1))
     NEW_LEADER_IP="${HOSTS[$NEW_LEADER_INDEX]}"
 
-    DEBUG_CONTENTS=$(ssh -f "ec2-user@${NEW_LEADER_IP}" "cat /home/ec2-user/Projects/baseImplementation/experiments/server${NEW_LEADER_ID}/raft-debugging.log")
+    DEBUG_CONTENTS=$(ssh -f "ec2-user@${NEW_LEADER_IP}" "cat $BASE_PATH/server${NEW_LEADER_ID}/$LOG_FILE_NAME")
     ELECT_TIME=$(echo "$DEBUG_CONTENTS" | grep -Eo "leader at timestamp: [0-9]+" | grep -Eo "[0-9]+")
     # loop until timestamp we are looking for appears in the log file
     while [ "$ELECT_TIME" = "" ]; do
         sleep .25
-        DEBUG_CONTENTS=$(ssh -f "ec2-user@${NEW_LEADER_IP}" "cat /home/ec2-user/Projects/baseImplementation/experiments/server${NEW_LEADER_ID}/raft-debugging.log")
+        DEBUG_CONTENTS=$(ssh -f "ec2-user@${NEW_LEADER_IP}" "cat $BASE_PATH/server${NEW_LEADER_ID}/$LOG_FILE_NAME")
         ELECT_TIME=$(echo "$DEBUG_CONTENTS" | grep -Eo "leader at timestamp: [0-9]+" | grep -Eo "[0-9]+")
     done 
 
