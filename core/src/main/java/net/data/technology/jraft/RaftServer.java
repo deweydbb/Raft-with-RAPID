@@ -762,7 +762,7 @@ public class RaftServer implements RaftMessageHandler {
 
     private void becomeLeader() {
         Instant instant = Instant.now();
-        logger.info("I have become leader at timestamp: %d%d", instant.getEpochSecond(), instant.getNano());
+        logger.info("I have become leader at timestamp: %d%09d", instant.getEpochSecond(), instant.getNano());
         this.stopElectionTimer();
         this.role = ServerRole.Leader;
         this.leader = this.id;
