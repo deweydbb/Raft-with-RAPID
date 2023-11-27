@@ -190,7 +190,15 @@ public class RaftClient {
     }
 
     private RpcClient getOrCreateRpcClient() {
-        return getOrCreateRpcClient(this.leaderId);
+        synchronized (this.rpcClients) {
+            if (this.rpcClients.containsKey(this.leaderId)) {
+                return this.rpcClients.get(this.leaderId);
+            }
+
+            RpcClient client = this.rpcClientFactory.createRpcClient(getLeaderEndpoint());
+            this.rpcClients.put(this.leaderId, client);
+            return client;
+        }
     }
 
     private RpcClient getOrCreateRpcClient(int serverId) {
@@ -199,7 +207,7 @@ public class RaftClient {
                 return this.rpcClients.get(serverId);
             }
 
-            RpcClient client = this.rpcClientFactory.createRpcClient(getLeaderEndpoint());
+            RpcClient client = this.rpcClientFactory.createRpcClient(getEndpoint(serverId));
             this.rpcClients.put(serverId, client);
             return client;
         }
@@ -211,6 +219,16 @@ public class RaftClient {
             this.rpcClients.put(this.leaderId, client);
             return client;
         }
+    }
+
+    private String getEndpoint(int serverId) {
+        for (ClusterServer server : this.configuration.getServers()) {
+            if (server.getId() == serverId) {
+                return server.getEndpoint();
+            }
+        }
+
+        return null;
     }
 
     private String getLeaderEndpoint() {
