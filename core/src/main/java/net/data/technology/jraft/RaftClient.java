@@ -71,7 +71,7 @@ public class RaftClient {
     }
 
     public int getLeaderId() {
-        return leaderId;
+        return randomLeader ? -1 : leaderId;
     }
 
     private void tryAnyNode(RaftRequestMessage request, CompletableFuture<ClusterConfiguration> future) {
@@ -93,6 +93,7 @@ public class RaftClient {
                                 logEntries[0].getValueType() == LogValueType.Configuration) {
                             configuration = ClusterConfiguration.fromBytes(logEntries[0].getValue());
                             leaderId = response.getDestination();
+                            randomLeader = false;
                             future.complete(configuration);
                         } else {
                             future.complete(null);
@@ -152,6 +153,7 @@ public class RaftClient {
             if(error == null){
                 logger.debug("response from remote server, leader: %d, accepted: %s", response.getDestination(), String.valueOf(response.isAccepted()));
                 if(response.isAccepted()){
+                    this.randomLeader = false;
                     future.complete(true);
                 }else{
                     // set the leader return from the server
