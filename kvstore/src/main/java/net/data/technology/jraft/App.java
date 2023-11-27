@@ -116,7 +116,7 @@ public class App {
         configuration.getServers().add(seedServer);
 
         RaftClient client = new RaftClient(new RpcTcpClientFactory(executor), configuration, new Log4jLoggerFactory());
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+        Scanner in = new Scanner(System.in);
 
         // immediately get config from seed server
 
@@ -129,59 +129,68 @@ public class App {
         configuration = newConfig;
         client.setConfiguration(configuration);
 
-        while (true) {
-            System.out.print("Message:");
-            String message = reader.readLine();
+        System.out.print("Message:");
 
-            if (message.startsWith("config")) {
-                newConfig = client.getClusterConfig().get();
-                if (newConfig != null) {
-                    configuration = newConfig;
-                    System.out.println("Config: " + configuration.getServers());
-                } else {
-                    System.out.println("Config:" + null);
-                }
+        while (in.hasNext()) {
+            try {
+                String message = in.nextLine();
 
-            }
-
-            if (message.startsWith("leader")) {
-                System.out.println("Leader: " + client.getLeaderId());
-                continue;
-            }
-
-            if (message.startsWith("put")) {
-                if (message.split(":").length == 3) {
-                    String entry = message.substring(message.indexOf(':') + 1);
-                    boolean accepted = client.appendEntries(new byte[][]{entry.getBytes()}).get();
-                    System.out.println("Accepted: " + accepted);
-                }
-                continue;
-            }
-
-            if (message.startsWith("get")) {
-                message = message.substring(message.indexOf(':') + 1);
-                String[] split = message.split(":");
-                String key = split[0];
-                ClusterServer server;
-
-                if (split.length > 1) {
-                    // user specified a specific server to read from
-                    int serverId = Integer.parseInt(split[1]);
-                    // check to see if config needs to be updated
-                    if (configuration.getServer(serverId) == null) {
-                        configuration = client.getClusterConfig().get();
+                if (message.startsWith("config")) {
+                    newConfig = client.getClusterConfig().get();
+                    if (newConfig != null) {
+                        configuration = newConfig;
+                        System.out.println("Config: " + configuration.getServers());
+                    } else {
+                        System.out.println("Config:" + null);
                     }
-                    server = configuration.getServer(serverId);
-                } else {
-                    // get random server
-                    List<ClusterServer> servers = configuration.getServers();
-                    server = servers.get(new Random().nextInt(servers.size()));
+
                 }
 
-                String result = get(server, key);
-                System.out.println(result);
+                if (message.startsWith("leader")) {
+                    System.out.println("Leader: " + client.getLeaderId());
+                    continue;
+                }
+
+                if (message.startsWith("put")) {
+                    if (message.split(":").length == 3) {
+                        String entry = message.substring(message.indexOf(':') + 1);
+                        boolean accepted = client.appendEntries(new byte[][]{entry.getBytes()}).get();
+                        System.out.println("Accepted: " + accepted);
+                    }
+                    continue;
+                }
+
+                if (message.startsWith("get")) {
+                    message = message.substring(message.indexOf(':') + 1);
+                    String[] split = message.split(":");
+                    String key = split[0];
+                    ClusterServer server;
+
+                    if (split.length > 1) {
+                        // user specified a specific server to read from
+                        int serverId = Integer.parseInt(split[1]);
+                        // check to see if config needs to be updated
+                        if (configuration.getServer(serverId) == null) {
+                            configuration = client.getClusterConfig().get();
+                        }
+                        server = configuration.getServer(serverId);
+                    } else {
+                        // get random server
+                        List<ClusterServer> servers = configuration.getServers();
+                        server = servers.get(new Random().nextInt(servers.size()));
+                    }
+
+                    String result = get(server, key);
+                    System.out.println(result);
+                }
+            } catch (Exception e) {
+                System.out.println("Error: " + e);
+            } finally {
+                System.out.print("Message:");
             }
         }
+
+        System.exit(0);
     }
 
     private static String get(ClusterServer server, String key) {

@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -760,6 +761,8 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private void becomeLeader() {
+        Instant instant = Instant.now();
+        logger.info("I have become leader at timestamp: %d%d", instant.getEpochSecond(), instant.getNano());
         this.stopElectionTimer();
         this.role = ServerRole.Leader;
         this.leader = this.id;
