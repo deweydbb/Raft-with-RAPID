@@ -96,6 +96,18 @@ public class App
     private static void executeAsClient(ClusterConfiguration configuration, ExecutorService executor) throws Exception {
         RaftClient client = new RaftClient(new RpcTcpClientFactory(executor), configuration, new Log4jLoggerFactory());
         Scanner in = new Scanner(System.in);
+        
+        // immediately get config from seed server
+
+        ClusterConfiguration newConfig = null;
+        while (newConfig == null) {
+            newConfig = client.getClusterConfig().get();
+            Thread.sleep(100);
+        }
+
+        configuration = newConfig;
+        client.setConfiguration(configuration);
+        
         System.out.print("Message:");
         while(in.hasNext()){
             try {
@@ -127,7 +139,7 @@ public class App
                 }
 
                 if (message.startsWith("config")) {
-                    ClusterConfiguration newConfig = client.getClusterConfig().get();
+                    newConfig = client.getClusterConfig().get();
                     if (newConfig != null) {
                         configuration = newConfig;
                         System.out.println("Config: " + configuration.getServers());
