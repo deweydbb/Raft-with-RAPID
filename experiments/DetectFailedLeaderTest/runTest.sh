@@ -18,6 +18,8 @@ for HOST_FILE in "${HOST_FILES[@]}"; do
         # create a new cluster
         ../runRemote.sh --file "$HOST_FILE" --cluster "../cluster${NUM_HOSTS}.json" > /dev/null 2>&1
 
+        sleep 3
+
         # get array of hosts from host file
         # client will arbitrarily connect to the first server
         SEED_IP="${HOSTS[0]}"
