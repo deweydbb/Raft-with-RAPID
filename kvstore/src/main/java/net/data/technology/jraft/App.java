@@ -63,7 +63,7 @@ public class App
 
         if("client".equalsIgnoreCase(args[0])){
 
-            String[] restOfArgs = Arrays.copyOfRange(args, 2, args.length);
+            String[] restOfArgs = Arrays.copyOfRange(args, 4, args.length);
             executeAsClient(config, executor, restOfArgs);
             return;
         }
