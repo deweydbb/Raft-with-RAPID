@@ -3,8 +3,8 @@
 HOST_FILES=("../hosts3.txt" "../hosts5.txt" "../hosts7.txt" "../hosts9.txt")
 
 # monitor for a minute
-REFRESH_RATE=5
-NUM_UPDATES=12
+REFRESH_RATE=1
+NUM_UPDATES=60
 
 function avg() {
     ARRAY=("$@")
@@ -45,15 +45,21 @@ for HOST_FILE in "${HOST_FILES[@]}"; do
 
     for HOST in "${HOSTS[@]}"; do
         RAW_OUTPUT=$(ssh -f "ec2-user@${HOST}" "tr -d '\0' < nethogs.txt")
-        LAST_LINE=$(echo "$RAW_OUTPUT" | grep "java" | tail -n1)
-        SENT_KBPS=$(echo "$LAST_LINE" | grep -Eo "/[0-9]+\s+[0-9]+\.[0-9]+" | grep -Eo "[0-9]+\.[0-9]+")
-        RECV_KBPS=$(echo "$LAST_LINE" | grep -Eo "\s+[0-9]+\.[0-9]+\s*$" | grep -Eo "[0-9]+\.[0-9]+")
-        # printf "\t$LAST_LINE\n"
-        # printf "\t\tSent: $SENT_KBPS\n"
-        # printf "\t\tRecv: $RECV_KBPS\n"
+        # LINES=$(echo "$RAW_OUTPUT" | grep "java")
+        
+        readarray -t LINES_ARRAY < <(echo "$LINES")
+        echo "lines array length: ${#LINES_ARRAY[@]}"
 
-        SENT_ARRAY+=("$SENT_KBPS")
-        RECV_ARRAY+=("$RECV_KBPS")
+        for LINE in "${LINES_ARRAY[@]}"; do
+            SENT_KBPS=$(echo "$LINE" | grep -Eo "/[0-9]+\s+[0-9]+\.[0-9]+" | grep -Eo "[0-9]+\.[0-9]+")
+            RECV_KBPS=$(echo "$LINE" | grep -Eo "\s+[0-9]+\.[0-9]+\s*$" | grep -Eo "[0-9]+\.[0-9]+")
+            # printf "\t$LINE\n"
+            # printf "\t\tSent: $SENT_KBPS\n"
+            # printf "\t\tRecv: $RECV_KBPS\n"
+
+            SENT_ARRAY+=("$SENT_KBPS")
+            RECV_ARRAY+=("$RECV_KBPS")
+        done
     done
 
     AVG_SENT_KBPS=$(avg "${SENT_ARRAY[@]}")
