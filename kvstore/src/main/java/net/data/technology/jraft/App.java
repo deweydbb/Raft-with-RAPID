@@ -20,6 +20,7 @@ import net.data.technology.jraft.extensions.FileBasedServerStateManager;
 import net.data.technology.jraft.extensions.Log4jLoggerFactory;
 import net.data.technology.jraft.extensions.RpcTcpClientFactory;
 import net.data.technology.jraft.extensions.RpcTcpListener;
+import org.checkerframework.checker.units.qual.C;
 
 import javax.swing.text.ParagraphView;
 import java.io.*;
@@ -30,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -82,6 +84,12 @@ public class App {
         int serverSize = Integer.parseInt(args[3]);
         String seedIp = args[4];
         int seedId = Integer.parseInt(args[5]);
+        long startCount = 0;
+        long endCount = 10;
+        if (args.length >= 8) {
+            startCount = Long.parseLong(args[6]);
+            endCount = Long.parseLong(args[7]);
+        }
 
 
         //URI localEndpoint = new URI( config.getServer(stateManager.getServerId()).getEndpoint());
@@ -94,7 +102,7 @@ public class App {
                 .withMaximumAppendingSize(200)
                 .withLogSyncBatchSize(5)
                 .withLogSyncStoppingGap(5);
-        KVStore mp = new KVStore(port);
+        KVStore mp = new KVStore(port, startCount, endCount);
         RaftContext context = new RaftContext(
                 stateManager,
                 mp,
@@ -235,13 +243,17 @@ public class App {
         System.out.println("num puts: " + numPuts);
 
         long count = 0;
+        CompletableFuture<Boolean> prev = new CompletableFuture<>();
+        prev.complete(true);
         while (count < numPuts) {
             try {
                 String entry = key + ":" + count;
-                client.appendEntries(new byte[][]{entry.getBytes()});
+                CompletableFuture<Boolean> nextPrev = client.appendEntries(new byte[][]{entry.getBytes()});
                 //System.out.printf("print result of %s:%s: %s\n", key, value, accepted);
-                if (count % (numPuts / 10) == 0) {
+                if (count % 1000 == 0) {
                     System.out.println("count = " + count);
+                    prev.get();
+                    prev = nextPrev;
                 }
 
                 //Thread.sleep(1);
