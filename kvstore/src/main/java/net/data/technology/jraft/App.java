@@ -25,6 +25,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
@@ -60,12 +62,20 @@ public class App
         ClusterConfiguration config = stateManager.loadClusterConfiguration();
 
         if("client".equalsIgnoreCase(args[0])){
-            executeAsClient(config, executor);
+
+            String[] restOfArgs = Arrays.copyOfRange(args, 2, args.length);
+            executeAsClient(config, executor, restOfArgs);
             return;
         }
 
         // Server mode
         int port = 8000 + Integer.parseInt(args[2]);
+        long startCount = 0;
+        long endCount = 10;
+        if (args.length >= 5) {
+            startCount = Long.parseLong(args[3]);
+            endCount = Long.parseLong(args[4]);
+        }
 
         URI localEndpoint = new URI(config.getServer(stateManager.getServerId()).getEndpoint());
         RaftParameters raftParameters = new RaftParameters()
@@ -78,7 +88,7 @@ public class App
                 .withLogSyncStoppingGap(5)
                 .withSnapshotEnabled(0) //disable snapshots
                 .withSyncSnapshotBlockSize(0);
-        KVStore mp = new KVStore(baseDir, port);
+        KVStore mp = new KVStore(baseDir, port, startCount, endCount);
         RaftContext context = new RaftContext(
                 stateManager,
                 mp,
@@ -93,12 +103,10 @@ public class App
         //mp.stop();
     }
 
-    private static void executeAsClient(ClusterConfiguration configuration, ExecutorService executor) throws Exception {
+    private static void executeAsClient(ClusterConfiguration configuration, ExecutorService executor, String[] args) throws Exception {
         RaftClient client = new RaftClient(new RpcTcpClientFactory(executor), configuration, new Log4jLoggerFactory());
-        Scanner in = new Scanner(System.in);
-        
-        // immediately get config from seed server
 
+        // immediately get config from seed server
         ClusterConfiguration newConfig = null;
         while (newConfig == null) {
             newConfig = client.getClusterConfig().get();
@@ -107,7 +115,26 @@ public class App
 
         configuration = newConfig;
         client.setConfiguration(configuration);
-        
+
+        System.out.println("Args " + Arrays.toString(args));
+        if (args.length > 0) {
+            if ("throughput".equals(args[0])) {
+                System.out.println("Executing throughput");
+                executeThroughputTest(client, configuration, Arrays.copyOfRange(args, 1, args.length));
+            } else {
+                System.out.println("Unknown arguments to client " + Arrays.toString(args) + ", exiting");
+            }
+        } else {
+            executeCommandLineClient(client, configuration);
+        }
+
+        System.exit(0);
+
+
+    }
+
+    private static void executeCommandLineClient(RaftClient client, ClusterConfiguration configuration) {
+        Scanner in = new Scanner(System.in);
         System.out.print("Message:");
         while(in.hasNext()){
             try {
@@ -139,7 +166,7 @@ public class App
                 }
 
                 if (message.startsWith("config")) {
-                    newConfig = client.getClusterConfig().get();
+                    ClusterConfiguration newConfig = client.getClusterConfig().get();
                     if (newConfig != null) {
                         configuration = newConfig;
                         System.out.println("Config: " + configuration.getServers());
@@ -194,6 +221,52 @@ public class App
         }
 
         System.exit(0);
+    }
+
+    private static void executeThroughputTest(RaftClient client, ClusterConfiguration configuration, String[] args) {
+        String key = new Random().nextInt(1_000) + 1 + "";
+
+        int leader = -1;
+        while (leader == -1) {
+            try {
+                client.getClusterConfig().get();
+                leader = client.getLeaderId();
+                System.out.println("Leader: " + leader);
+
+                if (leader == -1) {
+                    Thread.sleep(100);
+                }
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        long numPuts = Long.MAX_VALUE;
+        if (args.length > 0) {
+            numPuts = Long.parseLong(args[0]);
+        }
+        System.out.println("num puts: " + numPuts);
+
+        long count = 0;
+        CompletableFuture<Boolean> prev = new CompletableFuture<>();
+        prev.complete(true);
+        while (count < numPuts) {
+            try {
+                String entry = key + ":" + count;
+                CompletableFuture<Boolean> nextPrev = client.appendEntries(new byte[][]{entry.getBytes()});
+                //System.out.printf("print result of %s:%s: %s\n", key, value, accepted);
+                if (count % 1000 == 0) {
+                    System.out.println("count = " + count);
+                    prev.get();
+                    prev = nextPrev;
+                }
+
+                //Thread.sleep(1);
+                count++;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private static String get(ClusterServer server, String key) {

@@ -47,11 +47,20 @@ public class KVStore implements StateMachine {
     private AsynchronousServerSocketChannel listener;
     private ExecutorService executorService;
     private RaftMessageSender messageSender;
+    private final long startCount;
+    private final long endCount;
+    private long startTimestamp;
+    private long endTimestamp;
 
     public KVStore(Path baseDir, int listeningPort){
+        this(baseDir, listeningPort, 100, 4000);
+    }
+
+    public KVStore(Path baseDir, int listeningPort, long startCount, long endCount) {
         this.port = listeningPort;
         this.logger = LogManager.getLogger(getClass());
-        this.commitIndex = 0;
+        this.startCount = startCount;
+        this.endCount = endCount;
     }
 
     public void start(RaftMessageSender messageSender){
@@ -94,6 +103,16 @@ public class KVStore implements StateMachine {
         String[] split = message.split(":");
         if (split.length == 2) {
             map.put(split[0], split[1]);
+        }
+
+        if (startTimestamp == 0 && logIndex >= startCount) {
+            startTimestamp = System.currentTimeMillis();
+        } else if (endTimestamp == 0 && logIndex >= endCount) {
+            endTimestamp = System.currentTimeMillis();
+
+            double diff = (endTimestamp - startTimestamp) / 1000.0;
+            double throughPut = (endCount - startCount) / diff;
+            logger.info(String.format("Throughput: %.5f entries committed per second", throughPut));
         }
     }
 
