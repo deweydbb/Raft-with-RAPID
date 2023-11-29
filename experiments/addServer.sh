@@ -4,6 +4,8 @@ cd "$(dirname "$0")" || exit
 JAR="kvstore.jar"
 SEED_IP="127.0.0.1"
 SEED_ID=1
+START_COUNT=0
+END_COUNT=10
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -29,6 +31,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     --seedId)
       SEED_ID="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --startCount)
+      START_COUNT="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --endCount)
+      END_COUNT="$2"
       shift # past argument
       shift # past value
       ;;
@@ -72,4 +84,4 @@ cp "$JAR" "$DIR/kvstore.jar"
 echo "server.id=${ID}" > "$DIR/config.properties"
 
 cd "$DIR" || exit
-java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "server" "." "$ID" "$SIZE" "$SEED_IP" "$SEED_ID"
+java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "server" "." "$ID" "$SIZE" "$SEED_IP" "$SEED_ID" "$START_COUNT" "$END_COUNT"
