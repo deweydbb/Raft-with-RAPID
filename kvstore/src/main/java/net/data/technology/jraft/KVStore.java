@@ -104,7 +104,7 @@ public class KVStore implements StateMachine {
 
         if (startTimestamp == 0 && logIndex >= startCount) {
             startTimestamp = System.currentTimeMillis();
-        } else if (logIndex >= endCount) {
+        } else if (endTimestamp == 0 && logIndex >= endCount) {
             endTimestamp = System.currentTimeMillis();
 
             double diff = (endTimestamp - startTimestamp) / 1000.0;
