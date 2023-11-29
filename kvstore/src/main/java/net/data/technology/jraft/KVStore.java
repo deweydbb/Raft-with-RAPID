@@ -28,6 +28,7 @@ import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,10 +43,20 @@ public class KVStore implements StateMachine {
     private final org.apache.logging.log4j.Logger logger;
     private AsynchronousServerSocketChannel listener;
     private ExecutorService executorService;
+    private final long startCount;
+    private final long endCount;
+    private long startTimestamp;
+    private long endTimestamp;
 
     public KVStore(int listeningPort) {
+        this(listeningPort, 100, 4000);
+    }
+
+    public KVStore(int listeningPort, long startCount, long endCount) {
         this.port = listeningPort;
         this.logger = LogManager.getLogger(getClass());
+        this.startCount = startCount;
+        this.endCount = endCount;
     }
 
     public void start(RaftMessageSender messageSender) {
@@ -89,6 +100,16 @@ public class KVStore implements StateMachine {
         String[] split = message.split(":");
         if (split.length == 2) {
             map.put(split[0], split[1]);
+        }
+
+        if (startTimestamp == 0 && logIndex >= startCount) {
+            startTimestamp = System.currentTimeMillis();
+        } else if (logIndex >= endCount) {
+            endTimestamp = System.currentTimeMillis();
+
+            double diff = (endTimestamp - startTimestamp) / 1000.0;
+            double throughPut = (endCount - startCount) / diff;
+            logger.info(String.format("Throughput: %.5f entries committed per second", throughPut));
         }
     }
 

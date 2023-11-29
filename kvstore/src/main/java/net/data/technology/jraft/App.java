@@ -21,6 +21,7 @@ import net.data.technology.jraft.extensions.Log4jLoggerFactory;
 import net.data.technology.jraft.extensions.RpcTcpClientFactory;
 import net.data.technology.jraft.extensions.RpcTcpListener;
 
+import javax.swing.text.ParagraphView;
 import java.io.*;
 import java.net.Socket;
 import java.net.URI;
@@ -29,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
@@ -62,7 +64,9 @@ public class App {
 
             String serverIp = args[2];
             int serverId = Integer.parseInt(args[3]);
-            executeAsClient(serverIp, serverId, executor);
+
+            String[] restOfArgs = Arrays.copyOfRange(args, 4, args.length);
+            executeAsClient(serverIp, serverId, executor, restOfArgs);
             return;
         }
 
@@ -108,7 +112,7 @@ public class App {
         //mp.stop();
     }
 
-    private static void executeAsClient(String serverIp, int seedId, ExecutorService executor) throws Exception {
+    private static void executeAsClient(String serverIp, int seedId, ExecutorService executor, String[] args) throws Exception {
         ClusterServer seedServer = new ClusterServer();
         seedServer.setId(seedId);
         seedServer.setEndpoint(String.format("tcp://%s:90%02d", serverIp, seedId));
@@ -116,10 +120,8 @@ public class App {
         configuration.getServers().add(seedServer);
 
         RaftClient client = new RaftClient(new RpcTcpClientFactory(executor), configuration, new Log4jLoggerFactory());
-        Scanner in = new Scanner(System.in);
 
         // immediately get config from seed server
-
         ClusterConfiguration newConfig = null;
         while (newConfig == null) {
             newConfig = client.getClusterConfig().get();
@@ -129,14 +131,31 @@ public class App {
         configuration = newConfig;
         client.setConfiguration(configuration);
 
+        System.out.println("Args " + Arrays.toString(args));
+        if (args.length > 0) {
+            if ("throughput".equals(args[0])) {
+                System.out.println("Executing throughput");
+                executeThroughputTest(client, configuration, Arrays.copyOfRange(args, 1, args.length));
+            } else {
+                System.out.println("Unknown arguments to client " + Arrays.toString(args) + ", exiting");
+            }
+        } else {
+            executeCommandLineClient(client, configuration);
+        }
+
+        System.exit(0);
+    }
+
+    private static void executeCommandLineClient(RaftClient client, ClusterConfiguration configuration) {
         System.out.print("Message:");
 
+        Scanner in = new Scanner(System.in);
         while (in.hasNext()) {
             try {
                 String message = in.nextLine();
 
                 if (message.startsWith("config")) {
-                    newConfig = client.getClusterConfig().get();
+                    ClusterConfiguration newConfig = client.getClusterConfig().get();
                     if (newConfig != null) {
                         configuration = newConfig;
                         System.out.println("Config: " + configuration.getServers());
@@ -189,8 +208,48 @@ public class App {
                 System.out.print("Message:");
             }
         }
+    }
 
-        System.exit(0);
+    private static void executeThroughputTest(RaftClient client, ClusterConfiguration configuration, String[] args) {
+        String key = new Random().nextInt(1_000) + 1 + "";
+
+        int leader = -1;
+        while (leader == -1) {
+            try {
+                client.getClusterConfig().get();
+                leader = client.getLeaderId();
+                System.out.println("Leader: " + leader);
+
+                if (leader == -1) {
+                    Thread.sleep(100);
+                }
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        long numPuts = Long.MAX_VALUE;
+        if (args.length > 0) {
+            numPuts = Long.parseLong(args[0]);
+        }
+        System.out.println("num puts: " + numPuts);
+
+        long count = 0;
+        while (count < numPuts) {
+            try {
+                String entry = key + ":" + count;
+                client.appendEntries(new byte[][]{entry.getBytes()});
+                //System.out.printf("print result of %s:%s: %s\n", key, value, accepted);
+                if (count % (numPuts / 10) == 0) {
+                    System.out.println("count = " + count);
+                }
+
+                //Thread.sleep(1);
+                count++;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private static String get(ClusterServer server, String key) {

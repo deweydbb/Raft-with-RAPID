@@ -91,6 +91,7 @@ public class RaftClient {
                                 logEntries[0].getValueType() == LogValueType.Configuration) {
                             configuration = ClusterConfiguration.fromBytes(logEntries[0].getValue());
                             leaderId = response.getDestination();
+                            randomLeader = false;
                             future.complete(configuration);
                         } else {
                             future.complete(null);
