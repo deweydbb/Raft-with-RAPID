@@ -1,6 +1,8 @@
 #!/bin/bash
 
 CLUSTER_FILE="init-cluster.json"
+START_COUNT=0
+END_COUNT=10
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -13,6 +15,16 @@ while [[ $# -gt 0 ]]; do
       CLUSTER_FILE="$2"
       shift
       shift
+      ;;
+    --startCount)
+      START_COUNT="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --endCount)
+      END_COUNT="$2"
+      shift # past argument
+      shift # past value
       ;;
     --help)
       echo "Options:"
@@ -42,6 +54,6 @@ do
    HOST="${HOSTS[$INDEX]}"
    echo "Creating server $ID on $HOST"
    scp "$CLUSTER_FILE" "ec2-user@$HOST:/home/ec2-user/Projects/baseImplementation/experiments/init-cluster.json"
-   ssh -f "ec2-user@${HOST}" "sh -c 'cd /home/ec2-user/Projects/baseImplementation/experiments/; nohup ./addServer.sh --id ${ID} > stdout-log.log 2>&1 &'"
+   ssh -f "ec2-user@${HOST}" "sh -c 'cd /home/ec2-user/Projects/baseImplementation/experiments/; nohup ./addServer.sh --id ${ID} --startCount $START_COUNT --endCount $END_COUNT > stdout-log.log 2>&1 &'"
    sleep 1
 done

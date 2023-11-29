@@ -2,6 +2,8 @@
 cd "$(dirname "$0")" || exit
 
 JAR="kvstore.jar"
+START_COUNT=0
+END_COUNT=10
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -12,6 +14,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     -i|--id)
       ID="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --startCount)
+      START_COUNT="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --endCount)
+      END_COUNT="$2"
       shift # past argument
       shift # past value
       ;;
@@ -48,4 +60,4 @@ cp init-cluster.json "./server${ID}/cluster.json"
 echo "server.id=${ID}" > "$DIR/config.properties"
 
 cd "$DIR" || exit
-java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "server" "." "$ID"
+java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "server" "." "$ID" "$START_COUNT" "$END_COUNT"
