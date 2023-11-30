@@ -1,10 +1,23 @@
 #!/bin/bash
 
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --load)
+      LOAD="TRUE"
+      shift # past value
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+  esac
+done
+
 HOST_FILES=("../hosts3.txt" "../hosts5.txt" "../hosts7.txt" "../hosts9.txt")
 
 # monitor for a minute
 REFRESH_RATE=1
-NUM_UPDATES=60
+NUM_UPDATES=30
 
 function avg() {
     ARRAY=("$@")
@@ -41,7 +54,11 @@ for HOST_FILE in "${HOST_FILES[@]}"; do
         ssh -f "ec2-user@${HOST}" "sh -c 'nohup sudo nethogs -t -c $NUM_UPDATES -d $REFRESH_RATE > nethogs.txt 2>&1 &'"
     done
 
-    sleep $(($REFRESH_RATE * $NUM_UPDATES))
+    if [ -z ${LOAD+x} ]; then
+        sleep $(($REFRESH_RATE * $NUM_UPDATES))
+    else
+        ../addClient.sh --seedIp "${HOSTS[0]}" --throughput --numPuts 300000 > /dev/null 2>&1
+    fi
 
     for HOST in "${HOSTS[@]}"; do
         RAW_OUTPUT=$(ssh -f "ec2-user@${HOST}" "tr -d '\0' < nethogs.txt")
