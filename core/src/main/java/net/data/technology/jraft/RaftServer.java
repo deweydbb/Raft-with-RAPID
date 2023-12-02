@@ -109,15 +109,6 @@ public class RaftServer implements RaftMessageHandler {
         ClusterConfiguration newConfig = new ClusterConfiguration(cluster.getMemberlist(), this.logStore.getFirstAvailableIndex());
         reconfigure(newConfig);
 
-        //TODO no longer want to start an election as a new node, we will be notified of the leader
-//        if (leader == -1) {
-//            // we get append entries, set leader
-//            this.restartElectionTimer();
-//            if (leader != -1) {
-//                stopElectionTimer();
-//            }
-//        }
-
         this.logger.debug("End of start rapid, leader is %d", leader);
     }
 
@@ -233,9 +224,11 @@ public class RaftServer implements RaftMessageHandler {
             response = this.handleVoteRequest(request);
         } else if (request.getMessageType() == RaftMessageType.ClientRequest) {
             response = this.handleClientRequest(request);
+        } else if (request.getMessageType() == RaftMessageType.GetClusterRequest) {
+            return this.handleGetClusterRequest();
         } else {
-            // extended requests
-            response = this.handleExtendedMessages(request);
+            this.logger.error("receive an unknown request %s, for safety, step down.", request.getMessageType().toString());
+            this.stateMachine.exit(-1);
         }
 
         if (response != null) {
@@ -786,18 +779,7 @@ public class RaftServer implements RaftMessageHandler {
         this.config = newConfig;
     }
 
-    private synchronized RaftResponseMessage handleExtendedMessages(RaftRequestMessage request) {
-        if (request.getMessageType() == RaftMessageType.GetClusterRequest) {
-          return this.handleGetClusterRequest(request);
-        } else {
-            this.logger.error("receive an unknown request %s, for safety, step down.", request.getMessageType().toString());
-            this.stateMachine.exit(-1);
-        }
-
-        return null;
-    }
-
-    private RaftResponseMessage handleGetClusterRequest(RaftRequestMessage request) {
+    private RaftResponseMessage handleGetClusterRequest() {
         logger.info("start of handleGetClusterRequest");
         RaftResponseMessage response = new RaftResponseMessage();
         response.setMessageType(RaftMessageType.GetClusterResponse);
@@ -828,7 +810,6 @@ public class RaftServer implements RaftMessageHandler {
         return this.logStore.getLogEntryAt(logIndex).getTerm();
     }
 
-    // implements addserver removeserver and entries
     static class RaftMessageSenderImpl implements RaftMessageSender {
         // lower level, as take info and convert it to bytes etc...
         // method later tries to send to current leader
