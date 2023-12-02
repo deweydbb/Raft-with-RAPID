@@ -18,6 +18,8 @@ do
   cd ..
 done
 
+sleep 2
+
 echo "start client"
 mkdir client
 cp "./server1/config.properties" "./client/config.properties"

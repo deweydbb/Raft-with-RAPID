@@ -51,7 +51,7 @@ public class RaftServer implements RaftMessageHandler {
     private ServerRole role;
     private ServerState state;
     private int leader;
-    private int serverSize;
+    private final int serverSize;
     private final int id;
     private int votesGranted;
     private boolean electionCompleted;
@@ -61,14 +61,10 @@ public class RaftServer implements RaftMessageHandler {
     private final Random random;
     private final Callable<Void> electionTimeoutTask;
     private ClusterConfiguration config;
+    private ClusterConfiguration nextConfig;
+    private long nextConfigId;
     private long quickCommitIndex;
     private final CommittingThread commitingThread;
-
-    // fields for extended messages
-    private PeerServer serverToJoin = null;
-    private boolean configChanging = false;
-    private boolean catchingUp = false;
-    private int steppingDown = 0;
     // end fields for extended messages
 
     // rapid variables
@@ -93,7 +89,6 @@ public class RaftServer implements RaftMessageHandler {
             return null;
         };
 
-
         if (this.state == null) {
             this.state = new ServerState();
             this.state.setTerm(0);
@@ -114,13 +109,14 @@ public class RaftServer implements RaftMessageHandler {
         ClusterConfiguration newConfig = new ClusterConfiguration(cluster.getMemberlist(), this.logStore.getFirstAvailableIndex());
         reconfigure(newConfig);
 
-        if (leader == -1) {
-            // we get append entries, set leader
-            this.restartElectionTimer();
-            if (leader != -1) {
-                stopElectionTimer();
-            }
-        }
+        //TODO no longer want to start an election as a new node, we will be notified of the leader
+//        if (leader == -1) {
+//            // we get append entries, set leader
+//            this.restartElectionTimer();
+//            if (leader != -1) {
+//                stopElectionTimer();
+//            }
+//        }
 
         this.logger.debug("End of start rapid, leader is %d", leader);
     }
@@ -154,6 +150,9 @@ public class RaftServer implements RaftMessageHandler {
             IEdgeFailureDetectorFactory factory = new PingPongFailureDetector.Factory(listenEndpoint, messagingClient);
 
             if (this.id == context.getSeedId()) {
+                // server starting cluster automatically becomes the leader since there must be a leader to move from
+                // one configuration to the next but there is not a majority to elect a leader when the cluster size is just 1
+                becomeLeader();
                 cluster = new Cluster.Builder(listenAddress)
                         .useSettings(settings)
                         .setMessagingClientAndServer(messagingClient, messagingServer)
@@ -186,30 +185,27 @@ public class RaftServer implements RaftMessageHandler {
     public synchronized void onViewChange(final ClusterStatusChange viewChange) {
         logger.info("View change detected: %s", viewChange);
         System.out.println("View change detected: " + viewChange);
-        System.out.println("view change id " + viewChange.getConfigurationId());
-
-        this.configId = viewChange.getConfigurationId();
-        logger.debug("set configId = %d", configId);
 
         ClusterConfiguration newConfig = new ClusterConfiguration(viewChange.getMembership(), this.logStore.getFirstAvailableIndex());
 
-        reconfigure(newConfig);
+        // Leader is still in config continue to next config
+        if (newConfig.getServer(leader) != null) {
+            this.configId = viewChange.getConfigurationId();
+            logger.debug("set configId = %d", configId);
 
-        if (newConfig.getServers().size() > this.serverSize) {
-            logger.info("Updating server size from %d to %d in onViewChange", this.serverSize, newConfig.getServers().size());
-            this.serverSize = newConfig.getServers().size();
-        }
+            logger.debug("Leader %d is still in the config, continue to the new config", leader);
+            reconfigure(newConfig);
 
-        // if server is leader and new servers have joined, send appendEntries requests to let them know who the leader is
-        if (role == ServerRole.Leader && viewChange.getDelta().stream().map(NodeStatusChange::getStatus).anyMatch(x -> x == EdgeStatus.UP)) {
-            // hey I am the leader
-            this.requestAppendEntries();
-        }
-
-        // we need to know who current leader is and if new leader is not in new config, then we start randomized election timeout, and once that timeouts we call handle election timeout method
-        if (!peers.containsKey(leader) && this.id != this.leader) {
+            // if server is leader and new servers have joined, send appendEntries requests to let them know who the leader is
+            if (role == ServerRole.Leader && viewChange.getDelta().stream().map(NodeStatusChange::getStatus).anyMatch(x -> x == EdgeStatus.UP)) {
+                // hey I am the leader
+                this.requestAppendEntries();
+            }
+        } else {
+            // we need to elect a new leader before moving to the next config
             logger.debug("Last known leader %d is not in new config, starting election timeout", leader);
-            // last known leader is NOT in the new config, start randomized election timeout
+            nextConfigId = viewChange.getConfigurationId();
+            nextConfig = newConfig;
             restartElectionTimer();
         }
     }
@@ -259,11 +255,6 @@ public class RaftServer implements RaftMessageHandler {
         // we allow the server to be continue after term updated to save a round message
         this.updateTerm(request.getTerm());
 
-        // Reset stepping down value to prevent this server goes down when leader crashes after sending a LeaveClusterRequest
-        if (this.steppingDown > 0) {
-            this.steppingDown = 2;
-        }
-
         if (request.getTerm() == this.state.getTerm()) {
             if (this.role == ServerRole.Candidate) {
                 this.becomeFollower();
@@ -280,6 +271,16 @@ public class RaftServer implements RaftMessageHandler {
         response.setDestination(request.getSource());
         response.setConfigId(this.configId);
         response.setServerSize(this.serverSize);
+
+        if (this.configId != request.getConfigId() && nextConfig != null && nextConfigId == request.getConfigId()) {
+            synchronized (cluster) {
+                logger.debug("Moving from cluster %d to %d", configId, nextConfigId);
+                configId = nextConfigId;
+                reconfigure(nextConfig);
+                nextConfig = null;
+                nextConfigId = 0;
+            }
+        }
 
         // After a snapshot the request.getLastLogIndex() may less than logStore.getStartingIndex() but equals to logStore.getStartingIndex() -1
         // In this case, log is Okay if request.getLastLogIndex() == lastSnapshot.getLastLogIndex() && request.getLastLogTerm() == lastSnapshot.getLastTerm()
@@ -327,11 +328,6 @@ public class RaftServer implements RaftMessageHandler {
                 long indexForEntry = this.logStore.append(logEntry);
                 this.stateMachine.preCommit(indexForEntry, logEntry.getValue());
             }
-        }
-
-        if (request.getServerSize() > this.serverSize) {
-            logger.info("Updating server size from %d to %d in append entries", this.serverSize, response.getServerSize());
-            this.serverSize = request.getServerSize();
         }
 
         this.leader = request.getSource();
@@ -510,11 +506,6 @@ public class RaftServer implements RaftMessageHandler {
             return;
         }
 
-        if (response.getServerSize() > this.serverSize) {
-            logger.info("Updating server size from %d to %d in handlePeerResponse", this.serverSize, response.getServerSize());
-            this.serverSize = response.getServerSize();
-        }
-
         if (response.getMessageType() == RaftMessageType.RequestVoteResponse) {
             this.handleVotingResponse(response);
         } else if (response.getMessageType() == RaftMessageType.AppendEntriesResponse) {
@@ -624,9 +615,21 @@ public class RaftServer implements RaftMessageHandler {
         Instant instant = Instant.now();
         logger.info("I have become leader at timestamp: %d%09d", instant.getEpochSecond(), instant.getNano());
         this.stopElectionTimer();
+
+        if (nextConfig != null) {
+            synchronized (cluster) {
+                if (nextConfig != null) {
+                    logger.debug("Moving from cluster %d to %d", configId, nextConfigId);
+                    configId = nextConfigId;
+                    reconfigure(nextConfig);
+                    nextConfig = null;
+                    nextConfigId = 0;
+                }
+            }
+        }
+
         this.role = ServerRole.Leader;
         this.leader = this.id;
-        this.serverToJoin = null;
         for (PeerServer server : this.peers.values()) {
             server.setNextLogIndex(this.logStore.getFirstAvailableIndex());
             server.setFree();
@@ -637,7 +640,6 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private void becomeFollower() {
-        this.serverToJoin = null;
         this.role = ServerRole.Follower;
         logger.info("Becoming follower, restarting election timer");
         this.restartElectionTimer();
@@ -728,7 +730,7 @@ public class RaftServer implements RaftMessageHandler {
         return requestMessage;
     }
 
-    private void reconfigure(ClusterConfiguration newConfig) {
+    private synchronized void reconfigure(ClusterConfiguration newConfig) {
         this.logger.debug(
                 "system is reconfigured to have %d servers, last config index: %d, this config index: %d",
                 newConfig.getServers().size(),
@@ -793,16 +795,6 @@ public class RaftServer implements RaftMessageHandler {
         }
 
         return null;
-    }
-
-    private synchronized void handleExtendedResponse(RaftResponseMessage response, Throwable error) {
-        this.logger.debug(
-                "Receive an extended %s message from peer %d with Result=%s, Term=%d, NextIndex=%d",
-                response.getMessageType().toString(),
-                response.getSource(),
-                String.valueOf(response.isAccepted()),
-                response.getTerm(),
-                response.getNextIndex());
     }
 
     private RaftResponseMessage handleGetClusterRequest(RaftRequestMessage request) {
