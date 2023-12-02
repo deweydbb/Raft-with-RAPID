@@ -139,7 +139,6 @@ public class App {
         configuration = newConfig;
         client.setConfiguration(configuration);
 
-        System.out.println("Args " + Arrays.toString(args));
         if (args.length > 0) {
             if ("throughput".equals(args[0])) {
                 System.out.println("Executing throughput");

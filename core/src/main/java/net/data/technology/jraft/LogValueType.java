@@ -41,36 +41,6 @@ public enum LogValueType {
         public byte toByte() {
             return 2;
         }
-    },
-
-    /**
-     * Log value is cluster server id
-     */
-    ClusterServer {
-        @Override
-        public byte toByte() {
-            return 3;
-        }
-    },
-
-    /**
-     * Log value is a pack of many log entries, this is used when a server is left far behind or a new server just join the cluster
-     */
-    LogPack {
-        @Override
-        public byte toByte() {
-            return 4;
-        }
-    },
-
-    /**
-     * Log value is snapshot sync request data
-     */
-    SnapshotSyncRequest {
-        @Override
-        public byte toByte() {
-            return 5;
-        }
     };
 
     /**
@@ -90,12 +60,6 @@ public enum LogValueType {
                 return Application;
             case 2:
                 return Configuration;
-            case 3:
-                return ClusterServer;
-            case 4:
-                return LogPack;
-            case 5:
-                return SnapshotSyncRequest;
             default:
                 throw new IllegalArgumentException(String.format("%d is not defined for LogValueType", b));
         }

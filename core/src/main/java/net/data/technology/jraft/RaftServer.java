@@ -30,14 +30,12 @@ import com.vrg.rapid.pb.Endpoint;
 import java.io.IOException;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class RaftServer implements RaftMessageHandler {
 
-    private static final int DEFAULT_SNAPSHOT_SYNC_BLOCK_SIZE = 4 * 1024;
     private static final Comparator<Long> indexComparator = new Comparator<Long>() {
 
         @Override
@@ -81,7 +79,7 @@ public class RaftServer implements RaftMessageHandler {
         this.id = context.getServerStateManager().getServerId();
         this.state = context.getServerStateManager().readState();
         this.logStore = context.getServerStateManager().loadLogStore();
-        this.config = null;// context.getServerStateManager().loadClusterConfiguration();
+        this.config = null;
         this.stateMachine = context.getStateMachine();
         this.serverSize = context.getServerSize();
         this.votesGranted = 0;
@@ -103,56 +101,10 @@ public class RaftServer implements RaftMessageHandler {
             this.state.setCommitIndex(0);
         }
 
-        /*
-         * I found this implementation is also a victim of bug https://groups.google.com/forum/#!topic/raft-dev/t4xj6dJTP6E
-         * As the implementation is based on Diego's thesis
-         * Fix:
-         * We should never load configurations that is not committed,
-         *   this prevents an old server from replicating an obsoleted config to other servers
-         * The prove is as below:
-         * Assume S0 is the last committed server set for the old server A
-         * |- EXITS Log l which has been committed but l !BELONGS TO A.logs =>  Vote(A) < Majority(S0)
-         * In other words, we need to prove that A cannot be elected to leader if any logs/configs has been committed.
-         * Case #1, There is no configuration change since S0, then it's obvious that Vote(A) < Majority(S0), see the core Algorithm
-         * Case #2, There are one or more configuration changes since S0, then at the time of first configuration change was committed,
-         *      there are at least Majority(S0 - 1) servers committed the configuration change
-         *      Majority(S0 - 1) + Majority(S0) > S0 => Vote(A) < Majority(S0)
-         * -|
-         */
-
-        //try to see if there is an uncommitted configuration change, since we cannot allow two configuration changes at a time
-//        for (long i = Math.max(this.state.getCommitIndex() + 1, this.logStore.getStartIndex()); i < this.logStore.getFirstAvailableIndex(); ++i) {
-//            LogEntry logEntry = this.logStore.getLogEntryAt(i);
-//            if (logEntry.getValueType() == LogValueType.Configuration) {
-//                this.logger.error("SHOULD NOT RUN BECAUSE THERE SHOULD NEVER BE A CONFIG CHANGE COMMITTED TO THE LOG ANYMORE");
-//                this.logger.info("detect a configuration change that is not committed yet at index %d", i);
-//                this.configChanging = true;
-//                break;
-//            }
-//        }
-
-//        for (ClusterServer server : this.config.getServers()) {
-//            if (server.getId() != this.id) {
-//                this.peers.put(server.getId(), new PeerServer(server, context/*, this::handleHeartbeatTimeout*/));
-//            }
-//        }
-
-//        joinCluster(5);
-//        ClusterConfiguration newConfig = new ClusterConfiguration(cluster.getMemberlist(), this.logStore.getFirstAvailableIndex());
-//        reconfigure(newConfig);
-
         this.quickCommitIndex = this.state.getCommitIndex();
         this.commitingThread = new CommittingThread(this);
         this.role = ServerRole.Follower;
         new Thread(this.commitingThread).start();
-
-//        if (leader == -1) {
-//            // we get append entries, set leader
-//            this.restartElectionTimer();
-//            if (leader != -1) {
-//                stopElectionTimer();
-//            }
-//        }
 
         this.logger.info("Server %d started", this.id);
     }
@@ -165,7 +117,6 @@ public class RaftServer implements RaftMessageHandler {
         if (leader == -1) {
             // we get append entries, set leader
             this.restartElectionTimer();
-            // TODO: Not using locks, but if something goes wrong relates to this, we might need to use locks
             if (leader != -1) {
                 stopElectionTimer();
             }
@@ -216,12 +167,7 @@ public class RaftServer implements RaftMessageHandler {
                         .setEdgeFailureDetectorFactory(factory)
                         .join(seedAddress);
             }
-            cluster.registerSubscription(com.vrg.rapid.ClusterEvents.VIEW_CHANGE_PROPOSAL,
-                    this::onViewChangeProposal);
-            cluster.registerSubscription(com.vrg.rapid.ClusterEvents.VIEW_CHANGE,
-                    this::onViewChange);
-            cluster.registerSubscription(com.vrg.rapid.ClusterEvents.KICKED,
-                    this::onKicked);
+            cluster.registerSubscription(com.vrg.rapid.ClusterEvents.VIEW_CHANGE, this::onViewChange);
 
             configId = cluster.getConfigurationId();
             logger.debug("set configId = %d", configId);
@@ -232,24 +178,6 @@ public class RaftServer implements RaftMessageHandler {
             }
             joinCluster(numRetries - 1);
         }
-    }
-
-    /**
-     * Executed whenever a Cluster VIEW_CHANGE_PROPOSAL event occurs.
-     */
-    public void onViewChangeProposal(final ClusterStatusChange viewChange) {
-        logger.info("The condition detector has outputted a proposal: %s", viewChange);
-        //System.out.println("The condition detector has outputted a proposal: " + viewChange);
-        // Idea is to parse/extract information of removed/added servers, and then update the cluster config - maybe change linkedList this.servers
-    }
-
-    /**
-     * Executed whenever a Cluster KICKED event occurs.
-     */
-    public void onKicked(final ClusterStatusChange viewChange) {
-        logger.info("We got kicked from the network: {}", viewChange);
-        System.out.println("We got kicked from the network: " + viewChange);
-        // TODO: implement later
     }
 
     /**
@@ -342,10 +270,6 @@ public class RaftServer implements RaftMessageHandler {
             } else if (this.role == ServerRole.Leader) {
                 this.logger.error("Receive AppendEntriesRequest from another leader(%d) with same term, there must be a bug, server exits", request.getSource());
                 this.stateMachine.exit(-1);
-            } else {
-                this.logger.warning("this.role is a follower, and previously we called restartElectionTimer but no more");
-                // TODO: make sure not necessary
-                //this.restartElectionTimer();
             }
         }
 
@@ -387,24 +311,11 @@ public class RaftServer implements RaftMessageHandler {
             // dealing with overwrites
             while (index < this.logStore.getFirstAvailableIndex() && logIndex < logEntries.length) {
                 LogEntry oldEntry = this.logStore.getLogEntryAt(index);
-                if (oldEntry.getValueType() == LogValueType.Application) {
-                    this.stateMachine.rollback(index, oldEntry.getValue());
-                } else if (oldEntry.getValueType() == LogValueType.Configuration) {
-                    this.logger.info("revert a previous config change to config at %d", this.config.getLogIndex());
-                    this.logger.error("SHOULD NEVER RUN BECAUSDE getValueType should not equal LogValueType.Configuration");
-                    this.configChanging = false;
-                }
+                this.stateMachine.rollback(index, oldEntry.getValue());
 
                 LogEntry logEntry = logEntries[logIndex];
                 this.logStore.writeAt(index, logEntry);
-                if (logEntry.getValueType() == LogValueType.Application) {
-                    this.stateMachine.preCommit(index, logEntry.getValue());
-                } else if (logEntry.getValueType() == LogValueType.Configuration) {
-                    this.logger.error("SHOULD NEVER RUN BECAUSDE getValueType should not equal LogValueType.Configuration 2");
-
-                    this.logger.info("received a configuration change at index %d from leader", index);
-                    this.configChanging = true;
-                }
+                this.stateMachine.preCommit(index, logEntry.getValue());
 
                 index += 1;
                 logIndex += 1;
@@ -414,14 +325,7 @@ public class RaftServer implements RaftMessageHandler {
             while (logIndex < logEntries.length) {
                 LogEntry logEntry = logEntries[logIndex++];
                 long indexForEntry = this.logStore.append(logEntry);
-                if (logEntry.getValueType() == LogValueType.Configuration) {
-                    this.logger.error("SHOULD NEVER RUN BECAUSDE getValueType should not equal LogValueType.Configuration 3");
-
-                    this.logger.info("received a configuration change at index %d from leader", indexForEntry);
-                    this.configChanging = true;
-                } else if (logEntry.getValueType() == LogValueType.Application) {
-                    this.stateMachine.preCommit(indexForEntry, logEntry.getValue());
-                }
+                this.stateMachine.preCommit(indexForEntry, logEntry.getValue());
             }
         }
 
@@ -431,7 +335,6 @@ public class RaftServer implements RaftMessageHandler {
         }
 
         this.leader = request.getSource();
-        // TODO: make sure this is the right place for stopElectionTimer
         this.logger.info("We are about to call stopElectionTimer");
         stopElectionTimer();
         this.commit(request.getCommitIndex());
@@ -443,11 +346,6 @@ public class RaftServer implements RaftMessageHandler {
     private synchronized RaftResponseMessage handleVoteRequest(RaftRequestMessage request) {
         // we allow the server to be continue after term updated to save a round message
         this.updateTerm(request.getTerm());
-
-        // Reset stepping down value to prevent this server goes down when leader crashes after sending a LeaveClusterRequest
-        if (this.steppingDown > 0) {
-            this.steppingDown = 2;
-        }
 
         RaftResponseMessage response = new RaftResponseMessage();
         response.setMessageType(RaftMessageType.RequestVoteResponse);
@@ -494,7 +392,6 @@ public class RaftServer implements RaftMessageHandler {
         LogEntry[] logEntries = request.getLogEntries();
         if (logEntries != null && logEntries.length > 0) {
             for (int i = 0; i < logEntries.length; ++i) {
-
                 this.stateMachine.preCommit(this.logStore.append(new LogEntry(term, logEntries[i].getValue())), logEntries[i].getValue());
             }
         }
@@ -507,31 +404,6 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private synchronized void handleElectionTimeout() {
-        if (this.steppingDown > 0) {
-            if (--this.steppingDown == 0) {
-                this.logger.info("no hearing further news from leader, remove this server from config and step down");
-                ClusterServer server = this.config.getServer(this.id);
-                if (server != null) {
-                    this.config.getServers().remove(server);
-                    this.context.getServerStateManager().saveClusterConfiguration(this.config);
-                }
-
-                this.stateMachine.exit(0);
-                return;
-            }
-
-            this.logger.info("stepping down (cycles left: %d), skip this election timeout event", this.steppingDown);
-            this.restartElectionTimer();
-            return;
-        }
-
-        if (this.catchingUp) {
-            // this is a new server for the cluster, will not send out vote request until the config that includes this server is committed
-            this.logger.info("election timeout while joining the cluster, ignore it.");
-            this.restartElectionTimer();
-            return;
-        }
-
         if (this.role == ServerRole.Leader) {
             this.logger.error("A leader should never encounter election timeout, illegal application state, stop the application");
             this.stateMachine.exit(-1);
@@ -669,16 +541,15 @@ public class RaftServer implements RaftMessageHandler {
             }
 
             // try to commit with this response
-            ArrayList<Long> matchedIndexes = new ArrayList<Long>(this.peers.size() + 1);
+            ArrayList<Long> matchedIndexes = new ArrayList<>(this.peers.size() + 1);
             matchedIndexes.add(this.logStore.getFirstAvailableIndex() - 1);
             for (PeerServer p : this.peers.values()) {
                 matchedIndexes.add(p.getMatchedIndex());
             }
 
             matchedIndexes.sort(indexComparator);
-            this.commit(matchedIndexes.get((serverSize) / 2)); //TODO check correctness!!!! (removed +1) on serversize
+            this.commit(matchedIndexes.get((serverSize) / 2));
 
-//             this.commit(matchedIndexes.get((this.peers.size() + 1) / 2));
             needToCatchup = peer.clearPendingCommit() || response.getNextIndex() < this.logStore.getFirstAvailableIndex();
         } else {
             synchronized (peer) {
@@ -715,53 +586,23 @@ public class RaftServer implements RaftMessageHandler {
             this.votesGranted += 1;
         }
 
-        // TODO use server size
-        // if (this.votedServers.size() >= peers.size() + 1)
         if (this.votedServers.size() >= serverSize) {
             this.electionCompleted = true;
         }
 
         // got a majority set of granted votes
         if (this.votesGranted >= serverSize / 2 + 1) {
-            // if (this.votesGranted > (this.peers.size() + 1) / 2) {
             this.logger.info("Server is elected as leader for term %d", this.state.getTerm());
             this.electionCompleted = true;
             this.becomeLeader();
         }
     }
 
-    // TODO: leader does not need to send heartbeats, so this function should never be called
-//    private synchronized void handleHeartbeatTimeout(PeerServer peer) {
-//        this.logger.debug("THIS SHOULD NEVER BE CALLED Heartbeat timeout for %d", peer.getId());
-//        if (this.role == ServerRole.Leader) {
-//            this.requestAppendEntries(peer);
-//
-//            synchronized (peer) {
-//                if (peer.isHeartbeatEnabled()) {
-//                    // Schedule another heartbeat if heartbeat is still enabled
-//                    //peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
-//                } else {
-//                    this.logger.debug("heartbeat is disabled for peer %d", peer.getId());
-//                }
-//            }
-//        } else {
-//            this.logger.info("Receive a heartbeat event for %d while no longer as a leader", peer.getId());
-//        }
-//    }
-
     private void restartElectionTimer() {
-        // don't start the election timer while this server is still catching up the logs
-        if (this.catchingUp) {
-            logger.error("Error, ignoring restartElection timer due to catching up instance variable, which should be false");
-            return;
-        }
-
         if (this.scheduledElection != null) {
             this.scheduledElection.cancel(false);
         }
 
-        RaftParameters parameters = this.context.getRaftParameters();
-        //int electionTimeout = parameters.getElectionTimeoutLowerBound() + this.random.nextInt(parameters.getElectionTimeoutUpperBound() - parameters.getElectionTimeoutLowerBound() + 1);
         int electionTimeout = 500 + this.random.nextInt(1500);
         // Schedule when election happens based off randomized timeout
         this.logger.info("About to call schedule(this electionTimeoutTask in restartElectionTimer");
@@ -771,7 +612,6 @@ public class RaftServer implements RaftMessageHandler {
 
     private void stopElectionTimer() {
         if (this.scheduledElection == null) {
-            this.logger.warning("Election Timer is never started but is requested to stop, protential a bug");
             return;
         }
 
@@ -790,46 +630,15 @@ public class RaftServer implements RaftMessageHandler {
         for (PeerServer server : this.peers.values()) {
             server.setNextLogIndex(this.logStore.getFirstAvailableIndex());
             server.setFree();
-            // this.enableHeartbeatForPeer(server);
         }
 
-        // if current config is not committed, try to commit it
-        //TODO make sure this code is not needed
-//        if (this.config.getLogIndex() == 0) {
-//            this.config.setLogIndex(this.logStore.getFirstAvailableIndex());
-//            // TODO we probably no longer need this because Raft delegates configuration to from logstore RAPID
-//            this.logStore.append(new LogEntry(this.state.getTerm(), this.config.toBytes(), LogValueType.Configuration));
-//            this.logger.info("add initial configuration to log store");
-//            this.configChanging = true;
-//        }
-        // hey I've become leader
         this.requestAppendEntries();
         System.out.println("I have become the leader");
-        logger.info("End of become leader");
     }
 
-    // TODO: we can probably delete because don't need to call
-//    private void enableHeartbeatForPeer(PeerServer peer) {
-//        logger.error("Enable heartbeat for peer should NEVER be called");
-//        peer.enableHeartbeat(true);
-//        peer.resumeHeartbeatingSpeed();
-//        peer.setHeartbeatTask(this.context.getScheduledExecutor().schedule(peer.getHeartbeartHandler(), peer.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS));
-//    }
-
     private void becomeFollower() {
-        // stop heartbeat for all peers
-        for (PeerServer server : this.peers.values()) {
-            if (server.getHeartbeatTask() != null) {
-                logger.error("Canceling heartbeat task on perr, THIS SHOULD NEVER BE CALLED");
-                server.getHeartbeatTask().cancel(false);
-            }
-
-            server.enableHeartbeat(false);
-        }
-
         this.serverToJoin = null;
         this.role = ServerRole.Follower;
-        // TODO: do we want to restart the election timer here
         logger.info("Becoming follower, restarting election timer");
         this.restartElectionTimer();
     }
@@ -874,10 +683,8 @@ public class RaftServer implements RaftMessageHandler {
         long commitIndex = 0;
         long lastLogIndex = 0;
         long term = 0;
-        long startingIndex = 1;
 
         synchronized (this) {
-            startingIndex = this.logStore.getStartIndex();
             currentNextIndex = this.logStore.getFirstAvailableIndex();
             commitIndex = this.quickCommitIndex;
             term = this.state.getTerm();
@@ -949,25 +756,15 @@ public class RaftServer implements RaftMessageHandler {
 
         for (ClusterServer server : serversAdded) {
             if (server.getId() != this.id) {
-                PeerServer peer = new PeerServer(server, context /*, this::handleHeartbeatTimeout*/);
+                PeerServer peer = new PeerServer(server, context);
                 peer.setNextLogIndex(this.logStore.getFirstAvailableIndex());
                 this.peers.put(server.getId(), peer);
                 this.logger.info("server %d is added to cluster", peer.getId());
-                // TODO: Will probaly no longer need so delete
-                if (this.role == ServerRole.Leader) {
-                    //this.logger.info("enable heartbeating for server %d", peer.getId());
-                    //this.enableHeartbeatForPeer(peer);
-                    if (this.serverToJoin != null && this.serverToJoin.getId() == peer.getId()) {
-                        logger.info("SERVER TO JOIN IS NOT NULL IN RECONFIGURE, THIS SHOULD NOT HAPPEN");
-                        peer.setNextLogIndex(this.serverToJoin.getNextLogIndex());
-                        this.serverToJoin = null;
-                    }
-                }
             }
         }
 
         for (Integer id : serversRemoved) {
-            if (id == this.id && !this.catchingUp) {
+            if (id == this.id) {
                 // this server is removed from cluster
                 this.context.getServerStateManager().saveClusterConfiguration(newConfig);
                 this.logger.info("server has been removed from cluster, step down");
@@ -979,12 +776,6 @@ public class RaftServer implements RaftMessageHandler {
             if (peer == null) {
                 this.logger.info("peer %d cannot be found in current peer list", id);
             } else {
-                if (peer.getHeartbeatTask() != null) {
-                    logger.info("THIS SHOULD NEVER BE RUN, canceling heartbeat task");
-                    peer.getHeartbeatTask().cancel(false);
-                }
-
-                peer.enableHeartbeat(false);
                 this.peers.remove(id);
                 this.logger.info("server %d is removed from cluster", id.intValue());
             }
@@ -994,18 +785,7 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private synchronized RaftResponseMessage handleExtendedMessages(RaftRequestMessage request) {
-//         if (request.getMessageType() == RaftMessageType.AddServerRequest) {
-//             return this.handleAddServerRequest(request);
-//         } // TODO: we will be removing aeverything except synclogrequest because instead have server communicate to RAPID
-//         else if (request.getMessageType() == RaftMessageType.RemoveServerRequest) {
-//             return this.handleRemoveServerRequest(request);}
-        if (request.getMessageType() == RaftMessageType.SyncLogRequest) {
-            return this.handleLogSyncRequest(request);
-//        } else if (request.getMessageType() == RaftMessageType.JoinClusterRequest) {
-//            return this.handleJoinClusterRequest(request);
-//        } else if (request.getMessageType() == RaftMessageType.LeaveClusterRequest) {
-//             return this.handleLeaveClusterRequest(request);
-        } else if (request.getMessageType() == RaftMessageType.GetClusterRequest) {
+        if (request.getMessageType() == RaftMessageType.GetClusterRequest) {
           return this.handleGetClusterRequest(request);
         } else {
             this.logger.error("receive an unknown request %s, for safety, step down.", request.getMessageType().toString());
@@ -1016,11 +796,6 @@ public class RaftServer implements RaftMessageHandler {
     }
 
     private synchronized void handleExtendedResponse(RaftResponseMessage response, Throwable error) {
-        if (error != null) {
-            this.handleExtendedResponseError(error);
-            return;
-        }
-
         this.logger.debug(
                 "Receive an extended %s message from peer %d with Result=%s, Term=%d, NextIndex=%d",
                 response.getMessageType().toString(),
@@ -1028,201 +803,7 @@ public class RaftServer implements RaftMessageHandler {
                 String.valueOf(response.isAccepted()),
                 response.getTerm(),
                 response.getNextIndex());
-        if (response.getMessageType() == RaftMessageType.SyncLogResponse) {
-            if (this.serverToJoin != null) {
-                // we are reusing heartbeat interval value to indicate when to stop retry
-                this.serverToJoin.resumeHeartbeatingSpeed();
-                this.serverToJoin.setNextLogIndex(response.getNextIndex());
-                this.serverToJoin.setMatchedIndex(response.getNextIndex() - 1);
-                this.syncLogsToNewComingServer(response.getNextIndex());
-            }
-        } /*else if (response.getMessageType() == RaftMessageType.JoinClusterResponse) {
-            if (this.serverToJoin != null) {
-                if (response.isAccepted()) {
-                    this.logger.debug("new server confirms it will join, start syncing logs to it");
-                    this.syncLogsToNewComingServer(1);
-                } else {
-                    this.logger.debug("new server cannot accept the invitation, give up");
-                }
-            } else {
-                this.logger.debug("no server to join, drop the message");
-            }
-        } else if (response.getMessageType() == RaftMessageType.LeaveClusterResponse) {
-            if (!response.isAccepted()) {
-                this.logger.info("peer doesn't accept to stepping down, stop proceeding");
-                return;
-            }
-
-            this.logger.debug("peer accepted to stepping down, removing this server from cluster");
-            this.removeServerFromCluster(response.getSource());
-        }*/ else {
-            // No more response message types need to be handled
-            this.logger.error("received an unexpected response message type %s, for safety, stepping down", response.getMessageType());
-            this.stateMachine.exit(-1);
-        }
     }
-
-    private void handleExtendedResponseError(Throwable error) {
-        this.logger.info("receive an error response from peer server, %s", error.toString());
-        RpcException rpcError = null;
-        if (error instanceof RpcException) {
-            rpcError = (RpcException) error;
-        } else if (error instanceof CompletionException && ((CompletionException) error).getCause() instanceof RpcException) {
-            rpcError = (RpcException) ((CompletionException) error).getCause();
-        }
-
-        if (rpcError != null) {
-            this.logger.debug("it's a rpc error, see if we need to retry");
-            final RaftRequestMessage request = rpcError.getRequest();
-            if (request.getMessageType() == RaftMessageType.SyncLogRequest || request.getMessageType() == RaftMessageType.JoinClusterRequest || request.getMessageType() == RaftMessageType.LeaveClusterRequest) {
-                final PeerServer server = (request.getMessageType() == RaftMessageType.LeaveClusterRequest) ? this.peers.get(request.getDestination()) : this.serverToJoin;
-                if (server != null) {
-                    if (server.getCurrentHeartbeatInterval() >= this.context.getRaftParameters().getMaxHeartbeatInterval()) {
-                        if (request.getMessageType() == RaftMessageType.LeaveClusterRequest) {
-                            this.logger.error("rpc failed again for the removing server (%d), will remove this server directly", server.getId());
-
-                            /**
-                             * In case of there are only two servers in the cluster, it safe to remove the server directly from peers
-                             * as at most one config change could happen at a time
-                             *  prove:
-                             *      assume there could be two config changes at a time
-                             *      this means there must be a leader after previous leader offline, which is impossible 
-                             *      (no leader could be elected after one server goes offline in case of only two servers in a cluster)
-                             * so the bug https://groups.google.com/forum/#!topic/raft-dev/t4xj6dJTP6E 
-                             * does not apply to cluster which only has two members
-                             */
-                            if (this.peers.size() == 1) {
-                                PeerServer peer = this.peers.get(server.getId());
-                                if (peer == null) {
-                                    this.logger.info("peer %d cannot be found in current peer list", id);
-                                } else {
-                                    if (peer.getHeartbeatTask() != null) {
-                                        peer.getHeartbeatTask().cancel(false);
-                                    }
-
-                                    peer.enableHeartbeat(false);
-                                    this.peers.remove(server.getId());
-                                    this.logger.info("server %d is removed from cluster", server.getId());
-                                }
-                            }
-
-                            this.removeServerFromCluster(server.getId());
-                        } else {
-                            this.logger.info("rpc failed again for the new coming server (%d), will stop retry for this server", server.getId());
-                            this.configChanging = false;
-                            this.serverToJoin = null;
-                        }
-                    } else {
-                        // reuse the heartbeat interval value to indicate when to stop retrying, as rpc backoff is the same
-                        this.logger.debug("retry the request");
-                        server.slowDownHeartbeating();
-                        final RaftServer self = this;
-                        this.context.getScheduledExecutor().schedule(new Callable<Void>() {
-
-                            @Override
-                            public Void call() throws Exception {
-                                self.logger.debug("retrying the request %s", request.getMessageType().toString());
-                                server.SendRequest(request).whenCompleteAsync((RaftResponseMessage furtherResponse, Throwable furtherError) -> {
-                                    self.handleExtendedResponse(furtherResponse, furtherError);
-                                }, self.context.getScheduledExecutor());
-                                return null;
-                            }
-                        }, server.getCurrentHeartbeatInterval(), TimeUnit.MILLISECONDS);
-                    }
-                }
-            }
-        }
-    }
-
-//     private RaftResponseMessage handleRemoveServerRequest(RaftRequestMessage request) {
-//         LogEntry[] logEntries = request.getLogEntries();
-//         RaftResponseMessage response = new RaftResponseMessage();
-//         response.setSource(this.id);
-//         response.setDestination(this.leader);
-//         response.setTerm(this.state.getTerm());
-//         response.setMessageType(RaftMessageType.RemoveServerResponse);
-//         response.setNextIndex(this.logStore.getFirstAvailableIndex());
-//         response.setAccepted(false);
-//         if (logEntries.length != 1 || logEntries[0].getValue() == null || logEntries[0].getValue().length != Integer.BYTES) {
-//             this.logger.info("bad remove server request as we are expecting one log entry with value type of Integer");
-//             return response;
-//         }
-//
-//         if (this.role != ServerRole.Leader) {
-//             this.logger.info("this is not a leader, cannot handle RemoveServerRequest");
-//             return response;
-//         }
-//
-//         if (this.configChanging) {
-//             // the previous config has not committed yet
-//             this.logger.info("previous config has not committed yet");
-//             return response;
-//         }
-//
-//         int serverId = ByteBuffer.wrap(logEntries[0].getValue()).getInt();
-//         if (serverId == this.id) {
-//             this.logger.info("cannot request to remove leader");
-//             return response;
-//         }
-//
-//         PeerServer peer = this.peers.get(serverId);
-//         if (peer == null) {
-//             this.logger.info("server %d does not exist", serverId);
-//             return response;
-//         }
-//
-//         RaftRequestMessage leaveClusterRequest = new RaftRequestMessage();
-//         leaveClusterRequest.setCommitIndex(this.quickCommitIndex);
-//         leaveClusterRequest.setDestination(peer.getId());
-//         leaveClusterRequest.setLastLogIndex(this.logStore.getFirstAvailableIndex() - 1);
-//         leaveClusterRequest.setLastLogTerm(0);
-//         leaveClusterRequest.setTerm(this.state.getTerm());
-//         leaveClusterRequest.setMessageType(RaftMessageType.LeaveClusterRequest);
-//         leaveClusterRequest.setSource(this.id);
-//         peer.SendRequest(leaveClusterRequest).whenCompleteAsync(this::handleExtendedResponse, this.context.getScheduledExecutor());
-//         response.setAccepted(true);
-//         return response;
-//     }
-
-//    private RaftResponseMessage handleAddServerRequest(RaftRequestMessage request) {
-//        logger.info("THIS FUNCTION SHOULD NEVER BE CALLED");
-//        LogEntry[] logEntries = request.getLogEntries();
-//        RaftResponseMessage response = new RaftResponseMessage();
-//        response.setSource(this.id);
-//        response.setDestination(this.leader);
-//        response.setTerm(this.state.getTerm());
-//        response.setMessageType(RaftMessageType.AddServerResponse);
-//        response.setNextIndex(this.logStore.getFirstAvailableIndex());
-//        response.setAccepted(false);
-//        if (logEntries.length != 1 || logEntries[0].getValueType() != LogValueType.ClusterServer) {
-//            this.logger.info("bad add server request as we are expecting one log entry with value type of ClusterServer");
-//            return response;
-//        }
-//
-//        if (this.role != ServerRole.Leader) {
-//            this.logger.info("this is not a leader, cannot handle AddServerRequest");
-//            return response;
-//        }
-//
-//        ClusterServer server = new ClusterServer(ByteBuffer.wrap(logEntries[0].getValue()));
-//        if (this.peers.containsKey(server.getId()) || this.id == server.getId()) {
-//            this.logger.warning("the server to be added has a duplicated id with existing server %d", server.getId());
-//            return response;
-//        }
-//
-//        if (this.configChanging) {
-//            // the previous config has not committed yet
-//            this.logger.info("previous config has not committed yet");
-//            return response;
-//        }
-//
-//        this.serverToJoin = new PeerServer(server, this.context, this::handleHeartbeatTimeout);
-//
-//        this.inviteServerToJoinCluster();
-//        response.setNextIndex(this.logStore.getFirstAvailableIndex());
-//        response.setAccepted(true);
-//        return response;
-//    }
 
     private RaftResponseMessage handleGetClusterRequest(RaftRequestMessage request) {
         logger.info("start of handleGetClusterRequest");
@@ -1247,162 +828,6 @@ public class RaftServer implements RaftMessageHandler {
         return response;
     }
 
-    // idea is get logEntries and apply to their log
-    private RaftResponseMessage handleLogSyncRequest(RaftRequestMessage request) {
-        LogEntry[] logEntries = request.getLogEntries();
-        RaftResponseMessage response = new RaftResponseMessage();
-        response.setSource(this.id);
-        response.setDestination(request.getSource());
-        response.setTerm(this.state.getTerm());
-        response.setMessageType(RaftMessageType.SyncLogResponse);
-        response.setNextIndex(this.logStore.getFirstAvailableIndex());
-        response.setAccepted(false);
-        response.setServerSize(this.serverSize);
-
-        if (logEntries == null ||
-                logEntries.length != 1 ||
-                logEntries[0].getValueType() != LogValueType.LogPack ||
-                logEntries[0].getValue() == null ||
-                logEntries[0].getValue().length == 0) {
-            this.logger.info("receive an invalid LogSyncRequest as the log entry value doesn't meet the requirements");
-            return response;
-        }
-
-        if (!this.catchingUp) {
-            this.logger.debug("This server is ready for cluster, ignore the request");
-            return response;
-        }
-
-        this.logStore.applyLogPack(request.getLastLogIndex() + 1, logEntries[0].getValue());
-        this.commit(this.logStore.getFirstAvailableIndex() - 1);
-        response.setNextIndex(this.logStore.getFirstAvailableIndex());
-        response.setAccepted(true);
-        return response;
-    }
-
-    private void syncLogsToNewComingServer(long startIndex) {
-        // only sync committed logs
-        int gap = (int) (this.quickCommitIndex - startIndex);
-        if (gap < this.context.getRaftParameters().getLogSyncStopGap()) {
-
-            this.logger.info("LogSync is done for server %d with log gap %d, now put the server into cluster", this.serverToJoin.getId(), gap);
-            ClusterConfiguration newConfig = new ClusterConfiguration();
-            newConfig.setLastLogIndex(this.config.getLogIndex());
-            newConfig.setLogIndex(this.logStore.getFirstAvailableIndex());
-            newConfig.getServers().addAll(this.config.getServers());
-            newConfig.getServers().add(this.serverToJoin.getClusterConfig());
-            LogEntry configEntry = new LogEntry(this.state.getTerm(), newConfig.toBytes(), LogValueType.Configuration);
-            this.logStore.append(configEntry);
-            this.configChanging = true;
-            this.requestAppendEntries();
-            return;
-        }
-
-        RaftRequestMessage request = null;
-        int sizeToSync = Math.min(gap, this.context.getRaftParameters().getLogSyncBatchSize());
-        byte[] logPack = this.logStore.packLog(startIndex, sizeToSync);
-        request = new RaftRequestMessage();
-        request.setCommitIndex(this.quickCommitIndex);
-        request.setDestination(this.serverToJoin.getId());
-        request.setSource(this.id);
-        request.setTerm(this.state.getTerm());
-        request.setServerSize(this.serverSize);
-        request.setMessageType(RaftMessageType.SyncLogRequest);
-        request.setLastLogIndex(startIndex - 1);
-        request.setLogEntries(new LogEntry[]{new LogEntry(this.state.getTerm(), logPack, LogValueType.LogPack)});
-
-        this.serverToJoin.SendRequest(request).whenCompleteAsync(this::handleExtendedResponse, this.context.getScheduledExecutor());
-    }
-
-    // TODO: We won't have this method
-//     private void inviteServerToJoinCluster() {
-//         RaftRequestMessage request = new RaftRequestMessage();
-//         request.setCommitIndex(this.quickCommitIndex);
-//         request.setDestination(this.serverToJoin.getId());
-//         request.setSource(this.id);
-//         request.setTerm(this.state.getTerm());
-//         request.setMessageType(RaftMessageType.JoinClusterRequest);
-//         request.setLastLogIndex(this.logStore.getFirstAvailableIndex() - 1);
-//         request.setLogEntries(new LogEntry[]{new LogEntry(this.state.getTerm(), this.config.toBytes(), LogValueType.Configuration)});
-//         this.serverToJoin.SendRequest(request).whenCompleteAsync(this::handleExtendedResponse, this.context.getScheduledExecutor());
-//     }
-
-    // tODO: Change this to be more for our rapid invariant
-//    private RaftResponseMessage handleJoinClusterRequest(RaftRequestMessage request) {
-//        logger.info("THIS SHOULD NOT BE CALLED IN OUR RAFT RAPID IMPLEMENTATION");
-//        LogEntry[] logEntries = request.getLogEntries();
-//        RaftResponseMessage response = new RaftResponseMessage();
-//        response.setSource(this.id);
-//        response.setDestination(request.getSource());
-//        response.setTerm(this.state.getTerm());
-//        response.setMessageType(RaftMessageType.JoinClusterResponse);
-//        response.setNextIndex(this.logStore.getFirstAvailableIndex());
-//        response.setAccepted(false);
-//        if (logEntries == null ||
-//                logEntries.length != 1 ||
-//                logEntries[0].getValueType() != LogValueType.Configuration ||
-//                logEntries[0].getValue() == null ||
-//                logEntries[0].getValue().length == 0) {
-//            this.logger.info("receive an invalid JoinClusterRequest as the log entry value doesn't meet the requirements");
-//            return response;
-//        }
-//
-//        if (this.catchingUp) {
-//            this.logger.info("this server is already in log syncing mode");
-//            return response;
-//        }
-//
-//        this.catchingUp = true;
-//        this.role = ServerRole.Follower;
-//        this.leader = request.getSource();
-//        this.state.setTerm(request.getTerm());
-//        this.state.setCommitIndex(0);
-//        this.quickCommitIndex = 0;
-//        this.state.setVotedFor(-1);
-//        this.context.getServerStateManager().persistState(this.state);
-//        this.stopElectionTimer();
-//        ClusterConfiguration newConfig = ClusterConfiguration.fromBytes(logEntries[0].getValue());
-//        this.reconfigure(newConfig);
-//        response.setTerm(this.state.getTerm());
-//        response.setAccepted(true);
-//        return response;
-//    }
-
-    // TODO: since we will not differentiate between killing server and crashing server, our server admin can delete server instead
-//    private RaftResponseMessage handleLeaveClusterRequest(RaftRequestMessage request) {
-//        RaftResponseMessage response = new RaftResponseMessage();
-//        response.setSource(this.id);
-//        response.setDestination(request.getSource());
-//        response.setTerm(this.state.getTerm());
-//        response.setMessageType(RaftMessageType.LeaveClusterResponse);
-//        response.setNextIndex(this.logStore.getFirstAvailableIndex());
-//        if (!this.configChanging) {
-//            this.steppingDown = 2;
-//            response.setAccepted(true);
-//        } else {
-//            response.setAccepted(false);
-//        }
-//
-//        return response;
-//    }
-
-    private void removeServerFromCluster(int serverId) {
-        // they create new cluster config and add servers to config if not the one they want to remove
-        ClusterConfiguration newConfig = new ClusterConfiguration();
-        newConfig.setLastLogIndex(this.config.getLogIndex());
-        newConfig.setLogIndex(this.logStore.getFirstAvailableIndex());
-        for (ClusterServer server : this.config.getServers()) {
-            if (server.getId() != serverId) {
-                newConfig.getServers().add(server);
-            }
-        }
-
-        this.logger.info("removed a server from configuration and save the configuration to log store at %d", newConfig.getLogIndex());
-        this.configChanging = true;
-        this.logStore.append(new LogEntry(this.state.getTerm(), newConfig.toBytes(), LogValueType.Configuration));
-        this.requestAppendEntries();
-    }
-
     private long termForLastLog(long logIndex) {
         if (logIndex == 0) {
             return 0;
@@ -1422,34 +847,6 @@ public class RaftServer implements RaftMessageHandler {
             this.server = server;
             this.rpcClients = new ConcurrentHashMap<Integer, RpcClient>();
         }
-
-        // probably won't need this
-//        @Override
-//        public CompletableFuture<Boolean> addServer(ClusterServer server) {
-//            LogEntry[] logEntries = new LogEntry[1];
-//            logEntries[0] = new LogEntry(0, server.toBytes(), LogValueType.ClusterServer);
-//            RaftRequestMessage request = new RaftRequestMessage();
-//            request.setMessageType(RaftMessageType.AddServerRequest);
-//            request.setLogEntries(logEntries);
-//            return this.sendMessageToLeader(request);
-//        }
-
-        // probably won't need this
-//        @Override
-//        public CompletableFuture<Boolean> removeServer(int serverId) {
-//            if (serverId < 0) {
-//                return CompletableFuture.completedFuture(false);
-//            }
-//
-//            ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
-//            buffer.putInt(serverId);
-//            LogEntry[] logEntries = new LogEntry[1];
-//            logEntries[0] = new LogEntry(0, buffer.array(), LogValueType.ClusterServer);
-//            RaftRequestMessage request = new RaftRequestMessage();
-//            request.setMessageType(RaftMessageType.RemoveServerRequest);
-//            request.setLogEntries(logEntries);
-//            return this.sendMessageToLeader(request);
-//        }
 
         @Override
         public CompletableFuture<Boolean> appendEntries(byte[][] values) {
@@ -1541,26 +938,7 @@ public class RaftServer implements RaftMessageHandler {
                     while (currentCommitIndex < server.quickCommitIndex && currentCommitIndex < server.logStore.getFirstAvailableIndex() - 1) {
                         currentCommitIndex += 1;
                         LogEntry logEntry = server.logStore.getLogEntryAt(currentCommitIndex);
-                        if (logEntry.getValueType() == LogValueType.Application) {
-                            server.stateMachine.commit(currentCommitIndex, logEntry.getValue());
-                        } // Won't have to worry about this because we won't have these log types
-                        else if (logEntry.getValueType() == LogValueType.Configuration) {
-                            server.logger.error("SHOULD NOT RUN. issue that logEntry.getValueType() == LogValueType.Configuration 4");
-                            synchronized (server) {
-                                ClusterConfiguration newConfig = ClusterConfiguration.fromBytes(logEntry.getValue());
-                                server.logger.info("configuration at index %d is committed", newConfig.getLogIndex());
-                                server.context.getServerStateManager().saveClusterConfiguration(newConfig);
-                                server.configChanging = false;
-                                if (server.config.getLogIndex() < newConfig.getLogIndex()) {
-                                    server.reconfigure(newConfig);
-                                }
-
-                                if (server.catchingUp && newConfig.getServer(server.id) != null) {
-                                    server.logger.info("this server is committed as one of cluster members");
-                                    server.catchingUp = false;
-                                }
-                            }
-                        }
+                        server.stateMachine.commit(currentCommitIndex, logEntry.getValue());
 
                         server.state.setCommitIndex(currentCommitIndex);
                     }

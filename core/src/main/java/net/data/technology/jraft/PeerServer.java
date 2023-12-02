@@ -33,65 +33,24 @@ public class PeerServer {
 
     private ClusterServer clusterConfig;
     private RpcClient rpcClient;
-    private int currentHeartbeatInterval;
-    private int heartbeatInterval;
-    private int rpcBackoffInterval;
-    private int maxHeartbeatInterval;
     private AtomicInteger busyFlag;
     private AtomicInteger pendingCommitFlag;
-    //private Callable<Void> heartbeatTimeoutHandler;
-    private ScheduledFuture<?> heartbeatTask;
     private long nextLogIndex;
     private long matchedIndex;
-    private boolean heartbeatEnabled;
     private Executor executor;
 
-    public PeerServer(ClusterServer server, RaftContext context/*, final Consumer<PeerServer> heartbeatConsumer*/) {
+    public PeerServer(ClusterServer server, RaftContext context) {
         this.clusterConfig = server;
         this.rpcClient = context.getRpcClientFactory().createRpcClient(server.getEndpoint());
         this.busyFlag = new AtomicInteger(0);
         this.pendingCommitFlag = new AtomicInteger(0);
-        this.heartbeatInterval = this.currentHeartbeatInterval = context.getRaftParameters().getHeartbeatInterval();
-        this.maxHeartbeatInterval = context.getRaftParameters().getMaxHeartbeatInterval();
-        this.rpcBackoffInterval = context.getRaftParameters().getRpcFailureBackoff();
-        this.heartbeatTask = null;
         this.nextLogIndex = 1;
         this.matchedIndex = 0;
-        this.heartbeatEnabled = false;
         this.executor = context.getScheduledExecutor();
-//        PeerServer self = this;
-//        this.heartbeatTimeoutHandler = new Callable<Void>() {
-//
-//            @Override
-//            public Void call() throws Exception {
-//                heartbeatConsumer.accept(self);
-//                return null;
-//            }
-//        };
     }
 
     public int getId() {
         return this.clusterConfig.getId();
-    }
-
-    public ClusterServer getClusterConfig() {
-        return this.clusterConfig;
-    }
-
-//    public Callable<Void> getHeartbeartHandler() {
-//        return this.heartbeatTimeoutHandler;
-//    }
-
-    public synchronized int getCurrentHeartbeatInterval() {
-        return this.currentHeartbeatInterval;
-    }
-
-//    public void setHeartbeatTask(ScheduledFuture<?> heartbeatTask) {
-//        this.heartbeatTask = heartbeatTask;
-//    }
-
-    public ScheduledFuture<?> getHeartbeatTask() {
-        return this.heartbeatTask;
     }
 
     public boolean makeBusy() {
@@ -100,18 +59,6 @@ public class PeerServer {
 
     public void setFree() {
         this.busyFlag.set(0);
-    }
-
-    public boolean isHeartbeatEnabled() {
-        return this.heartbeatEnabled;
-    }
-
-    public void enableHeartbeat(boolean enable) {
-        this.heartbeatEnabled = enable;
-
-        if (!enable) {
-            this.heartbeatTask = null;
-        }
     }
 
     public long getNextLogIndex() {
@@ -139,14 +86,13 @@ public class PeerServer {
     }
 
     public CompletableFuture<RaftResponseMessage> SendRequest(RaftRequestMessage request) {
-        boolean isAppendRequest = request.getMessageType() == RaftMessageType.AppendEntriesRequest || request.getMessageType() == RaftMessageType.InstallSnapshotRequest;
+        boolean isAppendRequest = request.getMessageType() == RaftMessageType.AppendEntriesRequest;
         return this.rpcClient.send(request)
                 .thenComposeAsync((RaftResponseMessage response) -> {
                     if (isAppendRequest) {
                         this.setFree();
                     }
 
-                    this.resumeHeartbeatingSpeed();
                     return CompletableFuture.completedFuture(response);
                 }, this.executor)
                 .exceptionally((Throwable error) -> {
@@ -154,18 +100,7 @@ public class PeerServer {
                         this.setFree();
                     }
 
-                    this.slowDownHeartbeating();
                     throw new RpcException(error, request);
                 });
-    }
-
-    public synchronized void slowDownHeartbeating() {
-        this.currentHeartbeatInterval = Math.min(this.maxHeartbeatInterval, this.currentHeartbeatInterval + this.rpcBackoffInterval);
-    }
-
-    public synchronized void resumeHeartbeatingSpeed() {
-        if (this.currentHeartbeatInterval > this.heartbeatInterval) {
-            this.currentHeartbeatInterval = this.heartbeatInterval;
-        }
     }
 }
