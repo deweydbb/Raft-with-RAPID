@@ -116,11 +116,12 @@ public class App
         configuration = newConfig;
         client.setConfiguration(configuration);
 
-        System.out.println("Args " + Arrays.toString(args));
         if (args.length > 0) {
             if ("throughput".equals(args[0])) {
                 System.out.println("Executing throughput");
                 executeThroughputTest(client, configuration, Arrays.copyOfRange(args, 1, args.length));
+            } else if ("addRemoveServer".equals(args[0])) {
+                executeAddRemoveServer(client, configuration, Arrays.copyOfRange(args, 1, args.length));
             } else {
                 System.out.println("Unknown arguments to client " + Arrays.toString(args) + ", exiting");
             }
@@ -266,6 +267,61 @@ public class App
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private static void executeAddRemoveServer(RaftClient client, ClusterConfiguration configuration, String[] args) {
+        try {
+            String serverIp = args[0];
+            int serverId = Integer.parseInt(args[1]);
+            int newServerId = Integer.parseInt(args[2]);
+            
+            int leader = -1;
+            while (leader == -1) {
+                try {
+                    client.getClusterConfig().get();
+                    leader = client.getLeaderId();
+                    System.out.println("Leader: " + leader);
+
+                    if (leader == -1) {
+                        Thread.sleep(100);
+                    }
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            boolean accepted = false;
+            while (!accepted) {
+                accepted = client.removeServer(serverId).get();
+            }
+            System.out.println("Remove server request accepted");
+
+            boolean removed = false;
+            while (!removed) {
+                ClusterConfiguration newConfig = client.getClusterConfig().get();
+                removed = newConfig.getServer(serverId) == null;
+            }
+            System.out.println("Remove server request completed");
+
+            ClusterServer serverToAdd = new ClusterServer();
+            serverToAdd.setEndpoint(String.format("tcp://%s:90%02d", serverIp, newServerId));
+            serverToAdd.setId(newServerId);
+
+            accepted = false;
+            while (!accepted) {
+                accepted = client.addServer(serverToAdd).get();
+            }
+            System.out.println("Add server request accepted");
+
+            boolean added = false;
+            while (!added) {
+                ClusterConfiguration newConfig = client.getClusterConfig().get();
+                added = newConfig.getServer(newServerId) != null;
+            }
+            System.out.println("Add server request completed");
+        } catch (Exception e) {
+            System.out.println("Error: " + e);
         }
     }
 

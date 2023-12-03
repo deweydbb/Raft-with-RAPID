@@ -42,6 +42,25 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    --addRemoveServer)
+      ADD_REM_SERVER="TRUE"
+      shift
+      ;;
+    --serverIp)
+      SERVER_IP="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --serverId)
+      SERVER_ID="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --newServerId)
+      NEW_SERVER_ID="$2"
+      shift # past argument
+      shift # past value
+      ;;
     --help)
       echo "Options:"
       printf "\t-j or --jar optional. Specifies the location of the jar file to run. Default is kvstore.jar\n"
@@ -71,13 +90,29 @@ if [[ -n ${THROUGHPUT+x} ]] && [ -z ${NUM_PUTS+x} ]; then
     exit
 fi
 
+if [[ -n ${ADD_REM_SERVER+x} ]] && [ -z ${SERVER_IP+x} ] && [ -z ${SERVER_ID+x} ] && [ -z ${NEW_SERVER_ID+x} ]; then
+    echo "--serverIp, --serverId, and --newServerId are required with --addRemoveServer"
+    exit
+fi
+
 if [[ -n ${CMD+x} ]] && [[ -n ${THROUGHPUT+x} ]]; then
     echo "Both --command and --throughput cannot both be used"
     exit
 fi
 
+if [[ -n ${ADD_REM_SERVER+x} ]] && [[ -n ${THROUGHPUT+x} ]]; then
+    echo "Both --addRemoveServer and --throughput cannot both be used"
+    exit
+fi
+
+if [[ -n ${CMD+x} ]] && [[ -n ${ADD_REM_SERVER+x} ]]; then
+    echo "Both --command and --addRemoveServer cannot both be used"
+    exit
+fi
+
 cp "$JAR" "$DIR/kvstore.jar"
-echo "{\"logIndex\":0,\"lastLogIndex\":0,\"servers\":[{\"id\": $SEED_ID,\"endpoint\": \"tcp://$SEED_IP:900$SEED_ID\"}]}" > "$DIR/cluster.json"
+PORT=$((9000+$SEED_ID))
+echo "{\"logIndex\":0,\"lastLogIndex\":0,\"servers\":[{\"id\": $SEED_ID,\"endpoint\": \"tcp://$SEED_IP:$PORT\"}]}" > "$DIR/cluster.json"
 echo "server.id=${SEED_ID}" > "$DIR/config.properties"
 if [[ -n ${CMD+x} ]]; then
     cp "$CMD" "$DIR/cmd.txt"
@@ -89,6 +124,8 @@ if [[ -n ${CMD+x} ]]; then
   java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID" < cmd.txt
 elif [[ -n ${THROUGHPUT+x} ]]; then
   java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID" throughput "$NUM_PUTS"
+elif [[ -n ${ADD_REM_SERVER+x} ]]; then
+  java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID" addRemoveServer "$SERVER_IP" "$SERVER_ID" "$NEW_SERVER_ID"
 else
   java -jar "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" -jar "kvstore.jar" "client" "." "$SEED_IP" "$SEED_ID"
 fi

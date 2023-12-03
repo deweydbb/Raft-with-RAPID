@@ -55,5 +55,5 @@ do
    echo "Creating server $ID on $HOST"
    scp "$CLUSTER_FILE" "ec2-user@$HOST:/home/ec2-user/Projects/baseImplementation/experiments/init-cluster.json"
    ssh -f "ec2-user@${HOST}" "sh -c 'cd /home/ec2-user/Projects/baseImplementation/experiments/; nohup ./addServer.sh --id ${ID} --startCount $START_COUNT --endCount $END_COUNT > stdout-log.log 2>&1 &'"
-   sleep 1
+   # sleep 1
 done
