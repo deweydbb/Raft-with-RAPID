@@ -17,11 +17,13 @@
 
 package net.data.technology.jraft.extensions;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.RandomAccessFile;
+import net.data.technology.jraft.LogEntry;
+import net.data.technology.jraft.LogValueType;
+import net.data.technology.jraft.SequentialLogStore;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -36,13 +38,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
-
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
-
-import net.data.technology.jraft.LogEntry;
-import net.data.technology.jraft.LogValueType;
-import net.data.technology.jraft.SequentialLogStore;
 
 public class FileBasedSequentialLogStore implements SequentialLogStore {
 

@@ -1,13 +1,12 @@
 /**
- *
  * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  The ASF licenses 
+ * or more contributor license agreements.  The ASF licenses
  * this file to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,6 +22,16 @@ public class RaftMessage {
     private int source;
     private int destination;
     private long term;
+    private long configId;
+    private int serverSize;
+
+    public long getConfigId() {
+        return configId;
+    }
+
+    public void setConfigId(long configId) {
+        this.configId = configId;
+    }
 
     public RaftMessageType getMessageType() {
         return messageType;
@@ -54,5 +63,13 @@ public class RaftMessage {
 
     public void setTerm(long term) {
         this.term = term;
+    }
+
+    public int getServerSize() {
+        return serverSize;
+    }
+
+    public void setServerSize(int serverSize) {
+        this.serverSize = serverSize;
     }
 }

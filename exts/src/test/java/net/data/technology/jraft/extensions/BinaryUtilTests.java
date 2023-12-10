@@ -78,7 +78,7 @@ public class BinaryUtilTests {
         response.setNextIndex(this.random.nextLong());
 
         byte[] data = BinaryUtils.messageToBytes(response);
-        RaftResponseMessage response1 = BinaryUtils.bytesToResponseMessage(data);
+        RaftResponseMessage response1 = BinaryUtils.bytesToResponseMessage(data).getFirst();
         assertEquals(response.getMessageType(), response1.getMessageType());
         assertEquals(response.isAccepted(), response1.isAccepted());
         assertEquals(response.getSource(), response1.getSource());

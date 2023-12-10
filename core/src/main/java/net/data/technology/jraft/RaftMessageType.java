@@ -1,13 +1,12 @@
 /**
- *
  * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  The ASF licenses 
+ * or more contributor license agreements.  The ASF licenses
  * this file to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -74,136 +73,27 @@ public enum RaftMessageType {
             return (byte) 5;
         }
     },
-    AddServerRequest {
+    GetClusterRequest {
         @Override
         public String toString() {
-            return "AddServerRequest";
+            return "GetClusterRequest";
         }
 
         @Override
         public byte toByte() {
-            return (byte) 6;
+            return (byte) 18;
         }
     },
-    AddServerResponse {
+
+    GetClusterResponse {
         @Override
         public String toString() {
-            return "AddServerResponse";
+            return "GetClusterResponse";
         }
 
         @Override
         public byte toByte() {
-            return (byte) 7;
-        }
-    },
-    RemoveServerRequest {
-        @Override
-        public String toString(){
-            return "RemoveServerRequest";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)8;
-        }
-    },
-    RemoveServerResponse {
-        @Override
-        public String toString(){
-            return "RemoveServerResponse";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)9;
-        }
-    },
-    SyncLogRequest {
-        @Override
-        public String toString(){
-            return "SyncLogRequest";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)10;
-        }
-    },
-    SyncLogResponse {
-        @Override
-        public String toString(){
-            return "SyncLogResponse";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)11;
-        }
-    },
-    JoinClusterRequest {
-        @Override
-        public String toString(){
-            return "JoinClusterRequest";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)12;
-        }
-    },
-    JoinClusterResponse {
-        @Override
-        public String toString(){
-            return "JoinClusterResponse";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)13;
-        }
-    },
-    LeaveClusterRequest {
-        @Override
-        public String toString(){
-            return "LeaveClusterRequest";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)14;
-        }
-    },
-    LeaveClusterResponse {
-        @Override
-        public String toString(){
-            return "LeaveClusterResponse";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)15;
-        }
-    },
-    InstallSnapshotRequest {
-        @Override
-        public String toString(){
-            return "InstallSnapshotRequest";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)16;
-        }
-    },
-    InstallSnapshotResponse {
-        @Override
-        public String toString(){
-            return "InstallSnapshotResponse";
-        }
-
-        @Override
-        public byte toByte(){
-            return (byte)17;
+            return (byte) 19;
         }
     };
 
@@ -211,42 +101,22 @@ public enum RaftMessageType {
 
     public static RaftMessageType fromByte(byte value) {
         switch (value) {
-        case 1:
-            return RequestVoteRequest;
-        case 2:
-            return RequestVoteResponse;
-        case 3:
-            return AppendEntriesRequest;
-        case 4:
-            return AppendEntriesResponse;
-        case 5:
-            return ClientRequest;
-        case 6:
-            return AddServerRequest;
-        case 7:
-            return AddServerResponse;
-        case 8:
-            return RemoveServerRequest;
-        case 9:
-            return RemoveServerResponse;
-        case 10:
-            return SyncLogRequest;
-        case 11:
-            return SyncLogResponse;
-        case 12:
-            return JoinClusterRequest;
-        case 13:
-            return JoinClusterResponse;
-        case 14:
-            return LeaveClusterRequest;
-        case 15:
-            return LeaveClusterResponse;
-        case 16:
-            return InstallSnapshotRequest;
-        case 17:
-            return InstallSnapshotResponse;
+            case 1:
+                return RequestVoteRequest;
+            case 2:
+                return RequestVoteResponse;
+            case 3:
+                return AppendEntriesRequest;
+            case 4:
+                return AppendEntriesResponse;
+            case 5:
+                return ClientRequest;
+            case 18:
+                return GetClusterRequest;
+            case 19:
+                return GetClusterResponse;
         }
 
-        throw new IllegalArgumentException("the value for the message type is not defined");
+        throw new IllegalArgumentException("the value for the message type is not define: " + value);
     }
 }

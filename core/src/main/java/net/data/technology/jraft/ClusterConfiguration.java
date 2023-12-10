@@ -1,13 +1,12 @@
 /**
- *
  * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  The ASF licenses 
+ * or more contributor license agreements.  The ASF licenses
  * this file to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,7 +16,10 @@
 
 package net.data.technology.jraft;
 
+import com.vrg.rapid.pb.Endpoint;
+
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -30,14 +32,34 @@ import java.util.List;
 public class ClusterConfiguration {
 
     private long logIndex;
+    // TODO remove
     private long lastLogIndex;
     private List<ClusterServer> servers;
 
-    public ClusterConfiguration(){
+    public ClusterConfiguration() {
         this.servers = new LinkedList<ClusterServer>();
         this.logIndex = 0;
         this.lastLogIndex = 0;
     }
+
+    public ClusterConfiguration(List<Endpoint> endpoints, long lastLogIndex) {
+        this.setLastLogIndex(0); //TODO not needed, previously did newConfig.setLastLogIndex(this.config.getLogIndex());
+        this.setLastLogIndex(lastLogIndex);
+        this.servers = new LinkedList<>();
+
+        for (Endpoint endpoint : endpoints) {
+            ClusterServer server = new ClusterServer();
+
+            server.setId(endpoint.getPort() % 8500);
+            String endpoint_str = String.format("tcp://%s:90%02d", endpoint.getHostname().toString(StandardCharsets.UTF_8), server.getId());
+            server.setEndpoint(endpoint_str);
+            System.out.println("server id = " + server.getId());
+            System.out.println("setting endpint to string " + endpoint_str);
+
+            servers.add(server);
+        }
+    }
+
 
     /**
      * De-serialize the data stored in buffer to cluster configuration
@@ -45,11 +67,11 @@ public class ClusterConfiguration {
      * @param buffer the binary data
      * @return cluster configuration
      */
-    public static ClusterConfiguration fromBytes(ByteBuffer buffer){
+    public static ClusterConfiguration fromBytes(ByteBuffer buffer) {
         ClusterConfiguration configuration = new ClusterConfiguration();
         configuration.setLogIndex(buffer.getLong());
         configuration.setLastLogIndex(buffer.getLong());
-        while(buffer.hasRemaining()){
+        while (buffer.hasRemaining()) {
             configuration.getServers().add(new ClusterServer(buffer));
         }
 
@@ -62,7 +84,7 @@ public class ClusterConfiguration {
      * @param data the binary data
      * @return cluster configuration
      */
-    public static ClusterConfiguration fromBytes(byte[] data){
+    public static ClusterConfiguration fromBytes(byte[] data) {
         return fromBytes(ByteBuffer.wrap(data));
     }
 
@@ -95,9 +117,9 @@ public class ClusterConfiguration {
      * @param id the server id
      * @return a cluster server configuration or null if id is not found
      */
-    public ClusterServer getServer(int id){
-        for(ClusterServer server : this.servers){
-            if(server.getId() == id){
+    public ClusterServer getServer(int id) {
+        for (ClusterServer server : this.servers) {
+            if (server.getId() == id) {
                 return server;
             }
         }
@@ -110,10 +132,10 @@ public class ClusterConfiguration {
      * this is used for the leader to serialize a new cluster configuration and replicate to peers
      * @return binary data that represents the cluster configuration
      */
-    public byte[] toBytes(){
+    public byte[] toBytes() {
         int totalSize = Long.BYTES * 2;
         List<byte[]> serversData = new ArrayList<byte[]>(this.servers.size());
-        for(int i = 0; i < this.servers.size(); ++i){
+        for (int i = 0; i < this.servers.size(); ++i) {
             ClusterServer server = this.servers.get(i);
             byte[] dataForServer = server.toBytes();
             totalSize += dataForServer.length;
@@ -123,7 +145,7 @@ public class ClusterConfiguration {
         ByteBuffer buffer = ByteBuffer.allocate(totalSize);
         buffer.putLong(this.logIndex);
         buffer.putLong(this.lastLogIndex);
-        for(int i = 0; i < serversData.size(); ++i){
+        for (int i = 0; i < serversData.size(); ++i) {
             buffer.put(serversData.get(i));
         }
 

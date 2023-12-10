@@ -2,9 +2,13 @@
 **/*.classpath
 **/*.project
 **/*.jar
-exts/target/
-core/target/
-kvstore/target/
+*/target
+/target
 .settings/
 .idea/
 setup/*/
+experiments/server*/
+experiments/client*/
+experiments/*.txt
+experiments/*/*.txt
+*.log

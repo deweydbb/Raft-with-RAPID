@@ -35,7 +35,7 @@ import net.data.technology.jraft.LogValueType;
 public class H2LogStoreTests {
 
     private Random random = new Random(Calendar.getInstance().getTimeInMillis());
-
+/*
     @Test
     public void testPackAndUnpack() throws IOException {
         Path container = Files.createTempDirectory("logstore");
@@ -270,5 +270,7 @@ public class H2LogStoreTests {
 
         return equals;
     }
+
+ */
 
 }

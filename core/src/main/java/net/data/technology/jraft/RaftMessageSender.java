@@ -1,13 +1,12 @@
 /**
- *
  * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  The ASF licenses 
+ * or more contributor license agreements.  The ASF licenses
  * this file to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,14 +25,14 @@ public interface RaftMessageSender {
      * @param server new member of cluster
      * @return true if request is accepted, or false if no leader, rpc fails or leader declines
      */
-    CompletableFuture<Boolean> addServer(ClusterServer server);
+    //CompletableFuture<Boolean> addServer(ClusterServer server);
 
     /**
      * Remove a server from cluster, the server will step down when the removal is confirmed
      * @param serverId the id for the server to be removed
      * @return true if request is accepted or false if no leader, rpc fails or leader declines
      */
-    CompletableFuture<Boolean> removeServer(int serverId);
+    //CompletableFuture<Boolean> removeServer(int serverId);
 
     /**
      * Append multiple application logs to log store
