@@ -3,6 +3,9 @@
 # Raft with RAPID
 Raft with RAPID consensus implementation in java. Relies on slightly modified version of [RAPID](https://github.com/deweydbb/rapid):
 
+The paper can be read [here](Raft_With_RAPID___In_Search_of_a_Simpler_Consensus_Algorithm.pdf).
+
+
 ## Code Structure
 This project contains not that much code, as it's well abstracted, here is the project structure
 * **core**, the core Raft with RAPID algorithm implementation
